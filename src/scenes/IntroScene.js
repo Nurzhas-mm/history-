@@ -134,6 +134,9 @@ export default class IntroScene extends Phaser.Scene {
     });
 
     const startGame = () => {
+      try {
+        localStorage.removeItem('archives_of_alash_save');
+      } catch (e) {}
       this.cameras.main.fadeOut(600, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => {
         this.scene.start('GameScene');

@@ -40,10 +40,10 @@ export const CHAPTERS = {
   },
   ch6: {
     id: 'ch6',
-    title: 'The Final Decision',
+    title: 'The Road to Semey',
     number: 6,
-    objective: 'Decide the fate of the page.',
-    reward: 10,
+    objective: 'Choose a companion in the village, overcome the road ambush, and deliver the manuscript to the Alash leaders in the city.',
+    reward: 20,
   },
 };
 
@@ -56,60 +56,74 @@ export const BONUS_POINTS = {
   puzzle: 10,
   cipher: 10,
   secret: 5,          // trust-gated confessions
-  finalChoice: 10,
+  finalChoice: 15,
   accusationMistake: -5,
 };
 
-export const FINAL_CHOICES = [
+// 4 Companion Candidates in the village for the journey to Semey
+export const COMPANIONS = [
   {
-    id: 'preserve',
-    title: 'PRESERVE',
-    description: 'Hide the whole manuscript, names and all, somewhere safer.',
-    detail: 'Abai\'s words and the record of everyone who carried them survive together. But as long as the page exists, every name on it is in danger.',
-    ending: 'THE PRESERVER',
-    endingText: 'The manuscript survived, whole and dangerous, because you protected it.',
+    id: 'sadyk',
+    name: 'Sadyk the Steppe Guide',
+    title: 'Садық (Степной проводник)',
+    desc: 'Boasts he knows secret steppe ravines to bypass any imperial patrol.',
+    outcome: 'betrayal',
+    flaw: 'Secretly conspired with the steppe ambushers to claim the imperial bounty.',
   },
   {
-    id: 'reveal',
-    title: 'REVEAL',
-    description: 'Send the manuscript to the Alash intellectuals in the city.',
-    detail: 'In their hands it could be printed and read by thousands. But the road is long, letters are opened, and the names travel with the pages.',
-    ending: 'THE SCHOLAR',
-    endingText: 'The words reached the people who were building a new nation.',
+    id: 'mukhamet',
+    name: 'Mukhamet the Scribe',
+    title: 'Мұхамет (Писарь)',
+    desc: 'Eloquent, educated clerk who claims devotion to enlightenment.',
+    outcome: 'theft',
+    flaw: 'Covets an imperial government rank and silver reward for turning in the copyists.',
   },
   {
-    id: 'guardian',
-    title: 'GUARDIAN',
-    description: 'Burn the list of names. Keep Abai\'s words.',
-    detail: 'No one will ever be arrested because of this page. But the memory of the people who saved Abai\'s words goes up in smoke.',
-    ending: 'THE GUARDIAN',
-    endingText: 'The names were lost, and every person on the list was safe.',
+    id: 'raiymbek',
+    name: 'Raiymbek the Blacksmith',
+    title: 'Райымбек (Кузнец, потомок батыров)',
+    desc: 'Muscular craftsman who carries the battle spirit of Kazakh batyrs.',
+    outcome: 'heroic',
+    virtue: 'Fiercely loyal. Shatters the ambushers in combat and opens the frontier post.',
+  },
+  {
+    id: 'dauletbai',
+    name: 'Daulet-bai the Merchant',
+    title: 'Дәулетбай (Богатый купец)',
+    desc: 'Influential trade merchant with bags of gold rubles and governor permits.',
+    outcome: 'diplomatic',
+    virtue: 'Bribes the road ambushers and the checkpoint sentries without shedding blood.',
   },
 ];
 
-export const LOST_ENDING = {
-  id: 'lost',
-  ending: 'THE LOST PAGE',
-  endingText: 'The clerk left the village at dawn, with the page.',
-};
+export const FINAL_CHOICES = [
+  {
+    id: 'raiymbek',
+    title: 'THE BATYR’S PATH',
+    description: 'Rode with Raiymbek the Blacksmith. Fought through the steppe ambush.',
+    detail: 'Raiymbek scattered the ambushers with batyr courage. The frontier guards dared not bar his path, and Abai’s heritage safely reached the Alash leaders in Semey.',
+    ending: 'HEROIC GUARDIAN',
+    endingText: 'The courage of the batyrs protected the wisdom of the Master.',
+  },
+  {
+    id: 'dauletbai',
+    title: 'THE DIPLOMAT’S PATH',
+    description: 'Rode with Daulet-bai the Merchant. Bribed the ambushers and frontier post.',
+    detail: 'Daulet-bai opened every gate with gold rubles and trade credentials. Blood was spared, and the Alash committee received the 12 copyists’ roster intact.',
+    ending: 'PRAGMATIC ALLIANCE',
+    endingText: 'Wisdom, influence and gold opened the road to freedom.',
+  },
+];
 
-// Epilogue text per ending. {high} is used when the village trusts you, {low} otherwise.
+// Epilogue text per victory companion
 export const EPILOGUES = {
-  preserve: {
-    high: 'The Elder, the Teacher and the Archivist kept the secret together. Years later the hidden manuscript was found intact, and historians read every name on its last page.',
-    low: 'You hid the manuscript alone. The villagers never quite forgave you for keeping secrets from them, but the page survived the dark years ahead.',
+  raiymbek: {
+    high: 'Alikhan Bokeikhanov personally welcomed you and Raiymbek at the Semey headquarters. The 12 copyists were shielded by the Alash Orda, and Abai\'s words were published in thousands of copies. Raiymbek became one of the first protectors of the national militia.',
+    low: 'You and Raiymbek delivered the manuscript through battle. The city welcomed the poems, though the village long remembered the tension on the road. The 12 copyists remained safe.',
   },
-  reveal: {
-    high: 'The village helped you send the manuscript east, sewn into a saddle blanket. It arrived. Some of the names on the list later appeared among the first readers of Alash newspapers.',
-    low: 'You sent the manuscript by post. It arrived, though someone had clearly opened the parcel along the way. You never learned who.',
-  },
-  guardian: {
-    high: 'The Elder lit the fire himself. "Sabit would have wanted the living to stay living," he said. Abai\'s words lived on in a hundred hand-made copies.',
-    low: 'You burned the page in silence. Nobody thanked you. Nobody was arrested, either.',
-  },
-  lost: {
-    high: 'The villagers stood by you, but the page was already gone. That winter, men in uniform came asking about the names. The Teacher\'s school was closed.',
-    low: 'Without proof, nobody believed you. That winter, men in uniform came asking about the names. The village learned to keep its books buried.',
+  dauletbai: {
+    high: 'Daulet-bai funded the immediate typesetting of Abai’s verses in the Semey printing house. Alikhan and Akhmet Baitursynuly praised your alliance. Every copyist received financial support to continue their schools.',
+    low: 'Daulet-bai’s bribes cleared your way to the Alash headquarters. The manuscripts were delivered safely, proving that pragmatism can serve noble ideals.',
   },
 };
 

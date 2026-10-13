@@ -233,7 +233,7 @@ export default class MenuScene extends Phaser.Scene {
       const raw = localStorage.getItem('archives_of_alash_save');
       if (raw) {
         const parsed = JSON.parse(raw);
-        hasSave = !!parsed.activeChapterId;
+        hasSave = !!parsed.activeChapterId && !(parsed.completedChapters && parsed.completedChapters.includes('ch6'));
       }
     } catch (e) {
       hasSave = false;
@@ -253,7 +253,7 @@ export default class MenuScene extends Phaser.Scene {
       });
 
       const newGameBtn = this.createParchmentButton(w / 2, btnY2, btnW, btnH, 'NEW GAME', () => {
-        localStorage.removeItem('archives_of_alash_save');
+        try { localStorage.removeItem('archives_of_alash_save'); } catch (e) {}
         this.transitionTo('IntroScene');
       });
 
@@ -267,6 +267,7 @@ export default class MenuScene extends Phaser.Scene {
       const btnY2 = h * 0.72;
 
       const startBtn = this.createParchmentButton(w / 2, btnY1, btnW, btnH, 'START GAME', () => {
+        try { localStorage.removeItem('archives_of_alash_save'); } catch (e) {}
         this.transitionTo('IntroScene');
       });
 

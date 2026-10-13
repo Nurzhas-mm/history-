@@ -2,9 +2,11 @@ import Phaser from 'phaser';
 import Player from '../entities/Player.js';
 import NPC from '../entities/NPC.js';
 import ChapterManager from '../systems/ChapterManager.js';
+import soundManager from '../systems/SoundManager.js';
 import { MAP_WIDTH, MAP_HEIGHT, PLAYER_START, BUILDINGS, TREES, NPCS, FRAGMENTS, DECORATIONS } from '../data/mapData.js';
 import { DIALOGUE, INTERVIEW_CHOICES } from '../data/dialogue.js';
 import { EVIDENCE } from '../data/evidence.js';
+import { COMPANIONS, FINAL_CHOICES, EPILOGUES } from '../data/chapters.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -17,18 +19,40 @@ export default class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
+    // Audio initialization
+    soundManager.init();
+    this.input.once('pointerdown', () => soundManager.startWindAmbient());
+    this.input.keyboard.once('keydown', () => soundManager.startWindAmbient());
+
     this.dialogueActive = false;
     this.dialogueQueue = [];
     this.dialogueIndex = 0;
     this.isTyping = false;
     this.showingChoices = false;
+    this.showingEvidenceMenu = false;
+    this.evidenceMenuContainer = null;
+    this.currentDialogueNpcKey = null;
     this.interactionTarget = null;
     this.allQuestsDone = false;
     this.eveningApplied = false;
 
+    // Road journey & companion states
+    this.followerCompanion = null;
+    this.followerShadow = null;
+    this.ambushTriggered = false;
+    this.ambushResolved = false;
+    this.checkpointTriggered = false;
+    this.alashArrivalTriggered = false;
+    this.footstepTimer = 0;
+
     this.chapterManager = new ChapterManager();
     // Try loading previous save if available
     this.chapterManager.loadState();
+
+    if (!this.chapterManager.isChapterActive('ch6')) {
+      this.chapterManager.companion = null;
+      this.chapterManager.checkpointPassed = false;
+    }
 
     this.drawMap();
     this.createShadowLayer();
@@ -42,6 +66,20 @@ export default class GameScene extends Phaser.Scene {
     this.createUI();
     this.setupInput();
     this.createAmbientParticles();
+
+    if (this.chapterManager.isChapterActive('ch6') && this.chapterManager.companion) {
+      this.createFollowerCompanion(this.chapterManager.companion);
+    } else {
+      this.chapterManager.companion = null;
+      if (this.followerCompanion) {
+        this.followerCompanion.destroy();
+        this.followerCompanion = null;
+      }
+      if (this.followerShadow) {
+        this.followerShadow.destroy();
+        this.followerShadow = null;
+      }
+    }
 
     if (this.chapterManager.isEvening) {
       this.applyEveningTransition(true);
@@ -64,25 +102,136 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update() {
-    if (this.dialogueActive || this.allQuestsDone || this.showingChoices) {
+    if (this.dialogueActive || this.allQuestsDone || this.showingChoices || this.showingEvidenceMenu) {
       if (this.player) this.player.setVelocity(0, 0);
       return;
     }
 
     this.player.update(this.cursors, this.wasd);
+
+    // Procedural footstep audio
+    if (this.player && this.player.body) {
+      const vx = this.player.body.velocity.x;
+      const vy = this.player.body.velocity.y;
+      if (vx !== 0 || vy !== 0) {
+        this.footstepTimer = (this.footstepTimer || 0) + 1;
+        if (this.footstepTimer % 20 === 0) {
+          soundManager.playFootstep();
+        }
+      }
+    }
+
+    // Follower companion smooth tracking
+    if (this.followerCompanion) {
+      const vx = this.player.body ? this.player.body.velocity.x : 0;
+      const vy = this.player.body ? this.player.body.velocity.y : 0;
+      const offsetX = vx > 0 ? -36 : (vx < 0 ? 36 : -28);
+      const offsetY = vy > 0 ? -32 : (vy < 0 ? 32 : 4);
+      const targetX = this.player.x + offsetX;
+      const targetY = this.player.y + offsetY;
+      const dist = Phaser.Math.Distance.Between(this.followerCompanion.x, this.followerCompanion.y, targetX, targetY);
+      if (dist > 18) {
+        this.followerCompanion.x = Phaser.Math.Linear(this.followerCompanion.x, targetX, 0.12);
+        this.followerCompanion.y = Phaser.Math.Linear(this.followerCompanion.y, targetY, 0.12);
+      }
+      if (this.followerShadow) {
+        this.followerShadow.setPosition(this.followerCompanion.x, this.followerCompanion.y + 16);
+      }
+    }
+
     if (this.npcs) {
       this.npcs.forEach(npc => npc.updateShadowPosition());
     }
     this.checkInteractions();
+
+    // Village eastern boundary check: x >= 1580
+    if (this.player.x >= 1580) {
+      const cm = this.chapterManager;
+      if (!cm.isChapterActive('ch6') && !cm.isChapterCompleted('ch6')) {
+        this.player.x = 1560;
+        this.showFloatingNotice('⚠ Дорога на восток ведет в город Семей. Завершите дела в ауле.');
+      } else if (cm.isChapterActive('ch6') && !cm.companion) {
+        this.player.x = 1560;
+        this.showFloatingNotice('⚠ Степная дорога опасна! Наймите напарника среди жителей аула.');
+      }
+    }
+
+    // Steppe Road ambush check: x >= 1780
+    if (this.chapterManager.isChapterActive('ch6') && this.chapterManager.companion && !this.ambushTriggered && !this.ambushResolved) {
+      if (this.player.x >= 1780 && this.player.x <= 1920) {
+        this.ambushTriggered = true;
+        this.triggerRoadAmbush();
+      }
+    }
+
+    // Frontier Post sentry check: x >= 2010
+    if (this.chapterManager.isChapterActive('ch6') && this.ambushResolved && !this.chapterManager.isCheckpointPassed()) {
+      if (this.player.x >= 2010 && this.player.x <= 2070 && !this.checkpointTriggered) {
+        this.checkpointTriggered = true;
+        this.triggerCheckpointEncounter();
+      }
+    }
+
+    // Semey Alash Headquarters arrival check: x >= 2440
+    if (this.chapterManager.isChapterActive('ch6') && this.chapterManager.isCheckpointPassed() && !this.alashArrivalTriggered) {
+      if (this.player.x >= 2440) {
+        this.alashArrivalTriggered = true;
+        this.triggerAlashArrival();
+      }
+    }
+  }
+
+  showFloatingNotice(text) {
+    if (this.floatingNoticeActive) return;
+    this.floatingNoticeActive = true;
+    const w = this.cameras.main.width;
+    const notice = this.add.text(w / 2, 85, text, {
+      fontFamily: 'Lora, Georgia, serif',
+      fontSize: '13px',
+      color: '#FFE8C0',
+      backgroundColor: '#1a0a00ee',
+      padding: { x: 14, y: 7 },
+      stroke: '#2A1506',
+      strokeThickness: 2
+    }).setOrigin(0.5).setDepth(120).setScrollFactor(0);
+
+    this.tweens.add({
+      targets: notice,
+      y: 65,
+      alpha: 0,
+      duration: 2500,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        notice.destroy();
+        this.floatingNoticeActive = false;
+      }
+    });
+  }
+
+  createFollowerCompanion(id) {
+    if (this.followerCompanion) {
+      this.followerCompanion.destroy();
+      this.followerCompanion = null;
+    }
+    if (this.followerShadow) {
+      this.followerShadow.destroy();
+      this.followerShadow = null;
+    }
+    const texture = `npc_${id}`;
+    this.followerCompanion = this.add.image(this.player.x - 32, this.player.y, texture).setDepth(9);
+    this.followerShadow = this.add.image(this.player.x - 32, this.player.y + 16, 'shadow')
+      .setDepth(8).setAlpha(0.25).setScale(0.85);
   }
 
   // ==================== MAP ====================
   drawMap() {
     const g = this.add.graphics().setDepth(0);
+    // Grass steppe base
     g.fillStyle(0x5A7D3A);
     g.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-    for (let i = 0; i < 300; i++) {
+    // Steppe grass specks
+    for (let i = 0; i < 450; i++) {
       const gx = Phaser.Math.Between(0, MAP_WIDTH);
       const gy = Phaser.Math.Between(0, MAP_HEIGHT);
       const shade = Phaser.Math.Between(0, 2);
@@ -91,7 +240,8 @@ export default class GameScene extends Phaser.Scene {
       g.fillCircle(gx, gy, Phaser.Math.Between(2, 6));
     }
 
-    for (let i = 0; i < 120; i++) {
+    // Grass blades
+    for (let i = 0; i < 180; i++) {
       const gx = Phaser.Math.Between(0, MAP_WIDTH);
       const gy = Phaser.Math.Between(0, MAP_HEIGHT);
       g.lineStyle(1, 0x4E7030, 0.3);
@@ -99,6 +249,7 @@ export default class GameScene extends Phaser.Scene {
       g.lineBetween(gx, gy, gx - 2, gy - 3);
     }
 
+    // Village roads & central square (x: 250..1450)
     g.fillStyle(0x8B7355, 0.5);
     g.fillRect(300, 250, 1000, 450);
     g.fillRect(400, 700, 700, 150);
@@ -111,16 +262,85 @@ export default class GameScene extends Phaser.Scene {
     g.strokeRect(300, 250, 1000, 450);
     g.strokeRect(400, 700, 700, 150);
     g.strokeCircle(800, 600, 180);
-    g.fillStyle(0x8B7355, 0.3);
-    g.fillRect(690, 430, 20, 120);
-    g.fillRect(890, 500, 20, 100);
 
-    for (let i = 0; i < 30; i++) {
-      const px = Phaser.Math.Between(330, 1270);
-      const py = Phaser.Math.Between(280, 680);
-      g.lineStyle(1, 0x7A6345, 0.2);
-      g.lineBetween(px, py, px + Phaser.Math.Between(-5, 5), py + Phaser.Math.Between(2, 8));
+    // Branching paths to candidate houses in the village
+    g.fillStyle(0x8B7355, 0.35);
+    g.fillRect(480, 760, 90, 80);   // to Sadyk
+    g.fillRect(910, 840, 110, 80);  // to Mukhamet
+    g.fillRect(1180, 740, 120, 80); // to Raiymbek forge
+    g.fillRect(1380, 480, 120, 80); // to Daulet-bai manor
+
+    // ==================== THE GREAT STEPPE ROAD & CANYON (x: 1450..2040) ====================
+    // Canyon rocky ridges north and south
+    g.fillStyle(0x4A382A, 0.7);
+    g.fillRect(1560, 100, 460, 310);
+    g.fillRect(1580, 720, 450, 380);
+    g.fillStyle(0x382A1E, 0.85);
+    g.fillRect(1600, 120, 400, 260);
+    g.fillRect(1620, 760, 390, 310);
+
+    // Rocky gorge contours
+    g.lineStyle(2, 0x5C4634, 0.6);
+    g.strokeRect(1560, 100, 460, 310);
+    g.strokeRect(1580, 720, 450, 380);
+
+    // Steppe canyon road surface
+    g.fillStyle(0x7D6548, 0.85);
+    g.fillRect(1450, 490, 580, 120);
+    g.fillStyle(0x947D5E, 0.5);
+    g.fillRect(1460, 505, 560, 90);
+    g.lineStyle(1.5, 0x664E35, 0.5);
+    g.strokeRect(1450, 490, 580, 120);
+
+    // Road ruts and wagon tracks
+    g.lineStyle(1, 0x553E27, 0.35);
+    g.lineBetween(1460, 530, 2030, 530);
+    g.lineBetween(1460, 570, 2030, 570);
+
+    // Steppe canyon rocks
+    for (let r = 0; r < 20; r++) {
+      const rx = Phaser.Math.Between(1580, 2000);
+      const ry = Phaser.Math.Between(420, 480);
+      g.fillStyle(0x5A4A38, 0.7);
+      g.fillCircle(rx, ry, Phaser.Math.Between(4, 9));
+      const rx2 = Phaser.Math.Between(1580, 2000);
+      const ry2 = Phaser.Math.Between(620, 680);
+      g.fillCircle(rx2, ry2, Phaser.Math.Between(4, 9));
     }
+
+    // ==================== FRONTIER CHECKPOINT OUTPOST (x: 2000..2080) ====================
+    g.fillStyle(0x66533D, 0.95);
+    g.fillRect(2010, 460, 80, 180);
+    g.lineStyle(2, 0x423220, 0.8);
+    g.strokeRect(2010, 460, 80, 180);
+
+    // ==================== SEMEY CITY QUARTER (x: 2080..2650) ====================
+    // Paved stone district
+    g.fillStyle(0x504A44);
+    g.fillRect(2080, 150, 570, 950);
+
+    // Cobblestone pavement grid
+    g.lineStyle(1, 0x3E3832, 0.45);
+    for (let cx = 2080; cx < 2640; cx += 26) {
+      g.lineBetween(cx, 160, cx, 1090);
+    }
+    for (let cy = 160; cy < 1090; cy += 16) {
+      g.lineBetween(2080, cy, 2640, cy);
+    }
+
+    // Main city avenue
+    g.fillStyle(0x5D554D);
+    g.fillRect(2080, 460, 570, 160);
+    g.lineStyle(2, 0x7B7166, 0.8);
+    g.lineBetween(2080, 460, 2640, 460);
+    g.lineBetween(2080, 620, 2640, 620);
+
+    // City plaza in front of Alash Headquarters
+    g.lineStyle(2, 0x8C8174, 0.5);
+    g.strokeCircle(2510, 450, 65);
+    g.strokeCircle(2510, 450, 95);
+    g.fillStyle(0x655D54, 0.6);
+    g.fillCircle(2510, 450, 40);
   }
 
   createShadowLayer() {
@@ -153,6 +373,14 @@ export default class GameScene extends Phaser.Scene {
         g.fillStyle(0x5C3A1E);
         g.fillRect(d.x, d.y + 2, d.w, 3);
         g.fillRect(d.x, d.y + 9, d.w, 3);
+      } else if (d.type === 'fence_v') {
+        g.fillStyle(0x000000, 0.1);
+        g.fillRect(d.x + 3, d.y + 2, 3, d.h);
+        g.fillStyle(0x4A3520);
+        for (let i = 0; i <= d.h; i += 20) g.fillRect(d.x - 2, d.y + i, 16, 4);
+        g.fillStyle(0x5C3A1E);
+        g.fillRect(d.x + 2, d.y, 3, d.h);
+        g.fillRect(d.x + 9, d.y, 3, d.h);
       } else if (d.type === 'well') {
         g.fillStyle(0x000000, 0.15);
         g.fillEllipse(d.x, d.y + 16, 38, 12);
@@ -179,6 +407,117 @@ export default class GameScene extends Phaser.Scene {
         g.lineStyle(2, 0x4A3520);
         g.strokeCircle(d.x - 10, d.y + 10, 7);
         g.strokeCircle(d.x + 10, d.y + 10, 7);
+      } else if (d.type === 'stones') {
+        g.fillStyle(0x6E6152);
+        g.fillCircle(d.x, d.y, 10);
+        g.fillStyle(0x827566);
+        g.fillCircle(d.x + 8, d.y + 4, 7);
+        g.fillCircle(d.x - 7, d.y + 3, 6);
+      } else if (d.type === 'horse_hitch') {
+        g.fillStyle(0x4A3520);
+        g.fillRect(d.x - 4, d.y - 20, 8, 24);
+        g.fillRect(d.x + 24, d.y - 20, 8, 24);
+        g.fillStyle(0x5C3A1E);
+        g.fillRect(d.x - 8, d.y - 18, 44, 5);
+        g.lineStyle(1.5, 0x8B7355);
+        g.strokeCircle(d.x + 8, d.y - 14, 4);
+        g.strokeCircle(d.x + 20, d.y - 14, 4);
+      } else if (d.type === 'anvil') {
+        // Tree stump base
+        g.fillStyle(0x5C3A1E);
+        g.fillEllipse(d.x, d.y + 4, 26, 16);
+        g.fillRect(d.x - 12, d.y - 10, 24, 16);
+        // Heavy iron anvil
+        g.fillStyle(0x2F353B);
+        g.fillRect(d.x - 10, d.y - 17, 20, 8);
+        g.fillTriangle(d.x - 10, d.y - 17, d.x - 17, d.y - 19, d.x - 10, d.y - 12);
+        g.fillStyle(0x5A626A);
+        g.fillRect(d.x - 8, d.y - 17, 16, 2);
+      } else if (d.type === 'trade_carriage') {
+        // Carriage shadow
+        g.fillStyle(0x000000, 0.2);
+        g.fillEllipse(d.x, d.y + 14, 54, 18);
+        // Wooden carriage body
+        g.fillStyle(0x6B4B32);
+        g.fillRect(d.x - 22, d.y - 12, 44, 22);
+        // Canvas curved top
+        g.fillStyle(0xDFD6C2);
+        g.fillRoundedRect(d.x - 24, d.y - 26, 48, 22, { tl: 12, tr: 12, bl: 0, br: 0 });
+        g.lineStyle(1, 0x8B7355, 0.6);
+        g.strokeRoundedRect(d.x - 24, d.y - 26, 48, 22, { tl: 12, tr: 12, bl: 0, br: 0 });
+        // Spoke wheels
+        g.lineStyle(2, 0x3D2817);
+        g.strokeCircle(d.x - 14, d.y + 10, 9);
+        g.strokeCircle(d.x + 14, d.y + 10, 9);
+        g.fillStyle(0xC4A46C);
+        g.fillCircle(d.x - 14, d.y + 10, 2.5);
+        g.fillCircle(d.x + 14, d.y + 10, 2.5);
+      } else if (d.type === 'checkpoint_gate') {
+        // Frontier Checkpoint Gate (turnpike beam)
+        const gateContainer = this.add.container(d.x, d.y).setDepth(6);
+        const post = this.add.graphics();
+        post.fillStyle(0x3D2B1A);
+        post.fillRect(-6, -32, 12, 34);
+        post.fillStyle(0x8B7355);
+        post.fillRect(-8, -34, 16, 4);
+        gateContainer.add(post);
+
+        const beam = this.add.graphics();
+        const beamLen = 90;
+        const isPassed = this.chapterManager.isCheckpointPassed();
+        beam.angle = isPassed ? -75 : 0;
+        for (let bi = 0; bi < beamLen; bi += 15) {
+          beam.fillStyle(bi % 30 === 0 ? 0xB22222 : 0xF0E6D2);
+          beam.fillRect(bi, -30, 15, 6);
+        }
+        beam.lineStyle(1, 0x2A1506);
+        beam.strokeRect(0, -30, beamLen, 6);
+        gateContainer.add(beam);
+
+        this.checkpointBeam = beam;
+      } else if (d.type === 'street_lantern') {
+        // Ornate Semey street lantern
+        const postG = this.add.graphics().setDepth(4);
+        postG.fillStyle(0x232B2B);
+        postG.fillRect(d.x - 2, d.y - 28, 4, 30);
+        postG.fillRect(d.x - 5, d.y + 2, 10, 4);
+        postG.fillRect(d.x - 4, d.y - 34, 8, 8);
+        postG.fillStyle(0xFFD700, 0.85);
+        postG.fillRect(d.x - 2.5, d.y - 32, 5, 5);
+
+        // Ambient glowing light circle
+        const light = this.add.circle(d.x, d.y - 12, 55, 0xFFE082, 0.08).setDepth(2);
+        this.tweens.add({
+          targets: light,
+          alpha: { from: 0.06, to: 0.11 },
+          scaleX: { from: 0.95, to: 1.08 },
+          scaleY: { from: 0.95, to: 1.08 },
+          duration: 1800,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      } else if (d.type === 'alash_banner') {
+        // Alash Party Banner
+        const flagG = this.add.graphics().setDepth(5);
+        flagG.fillStyle(0xC4A46C);
+        flagG.fillRect(d.x - 2, d.y - 70, 4, 75);
+        flagG.fillCircle(d.x, d.y - 72, 5);
+        // Turquoise flag
+        flagG.fillStyle(0x008080);
+        flagG.fillRoundedRect(d.x + 2, d.y - 68, 62, 38, { tl: 0, tr: 4, bl: 0, br: 4 });
+        flagG.lineStyle(1.5, 0xC4A46C, 0.9);
+        flagG.strokeRoundedRect(d.x + 2, d.y - 68, 62, 38, { tl: 0, tr: 4, bl: 0, br: 4 });
+        // Golden crescent & star
+        flagG.fillStyle(0xFFD700);
+        flagG.fillCircle(d.x + 22, d.y - 49, 7);
+        flagG.fillStyle(0x008080);
+        flagG.fillCircle(d.x + 25, d.y - 49, 6);
+        flagG.fillStyle(0xFFD700);
+        flagG.fillCircle(d.x + 36, d.y - 49, 3);
+        this.add.text(d.x + 32, d.y - 40, 'АЛАШ', {
+          fontFamily: 'Cinzel, Georgia, serif', fontSize: '9px', color: '#FFE8C0', fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(6);
       }
     });
   }
@@ -190,8 +529,17 @@ export default class GameScene extends Phaser.Scene {
       g.fillStyle(0x000000, 0.15);
       g.fillEllipse(b.x + b.w / 2, b.y + b.h + 3, b.w + 16, 14);
 
-      if (b.type === 'yurt') this.drawYurt(g, b.x + b.w / 2, b.y + b.h / 2, Math.min(b.w, b.h) / 2);
-      else if (b.type === 'brick') {
+      if (b.id === 'alash_headquarters') {
+        this.drawAlashHeadquarters(g, b);
+      } else if (b.id === 'checkpoint_tower') {
+        this.drawCheckpointTower(g, b);
+      } else if (b.id === 'blacksmith') {
+        this.drawBlacksmith(g, b);
+      } else if (b.id === 'merchant_manor') {
+        this.drawMerchantManor(g, b);
+      } else if (b.type === 'yurt') {
+        this.drawYurt(g, b.x + b.w / 2, b.y + b.h / 2, Math.min(b.w, b.h) / 2);
+      } else if (b.type === 'brick') {
         g.fillStyle(b.color);
         g.fillRoundedRect(b.x, b.y + 6, b.w, b.h - 6, { tl: 0, tr: 0, bl: 3, br: 3 });
         g.fillStyle(0x5C3A1E);
@@ -217,6 +565,167 @@ export default class GameScene extends Phaser.Scene {
       this.physics.add.existing(zone, true);
       this.buildingBodies.push(zone);
     });
+  }
+
+  drawAlashHeadquarters(g, b) {
+    // Grand Neoclassical 2-Story Alash Party Headquarters
+    // Red brick facade
+    g.fillStyle(0x8B3A3A);
+    g.fillRoundedRect(b.x, b.y + 10, b.w, b.h - 10, 4);
+    // Lower rusticated base
+    g.fillStyle(0x602525);
+    g.fillRect(b.x, b.y + b.h - 28, b.w, 28);
+
+    // Stone quoin borders on edges
+    g.fillStyle(0xD4C5A9);
+    for (let qy = b.y + 14; qy < b.y + b.h - 10; qy += 18) {
+      g.fillRect(b.x, qy, 10, 12);
+      g.fillRect(b.x + b.w - 10, qy, 10, 12);
+    }
+
+    // Triangular neoclassical pediment
+    g.fillStyle(0xD4C5A9);
+    g.fillTriangle(b.x - 8, b.y + 10, b.x + b.w / 2, b.y - 28, b.x + b.w + 8, b.y + 10);
+    g.fillStyle(0xC4A46C);
+    g.fillCircle(b.x + b.w / 2, b.y - 6, 8); // Golden central sun emblem
+
+    // Green copper cornice trim
+    g.fillStyle(0x3B6858);
+    g.fillRect(b.x - 6, b.y + 8, b.w + 12, 6);
+
+    // 4 Classical white columns
+    const colW = 12;
+    const colY = b.y + 36;
+    const colH = b.h - 48;
+    const colPositions = [b.x + 32, b.x + 62, b.x + b.w - 74, b.x + b.w - 44];
+    colPositions.forEach(cx => {
+      g.fillStyle(0xEDE6D8);
+      g.fillRect(cx, colY, colW, colH);
+      g.fillStyle(0xD4C5A9);
+      g.fillRect(cx - 3, colY, colW + 6, 6); // capital
+      g.fillRect(cx - 3, colY + colH - 6, colW + 6, 6); // base
+    });
+
+    // 2nd floor arched windows with warm glowing light
+    const winW = 18, winH = 26;
+    const win2Y = b.y + 24;
+    for (let wx = b.x + 22; wx < b.x + b.w - 30; wx += 28) {
+      g.fillStyle(0xEDE6D8);
+      g.fillRoundedRect(wx - 2, win2Y - 2, winW + 4, winH + 4, { tl: 8, tr: 8, bl: 0, br: 0 });
+      g.fillStyle(0xFFD700, 0.45);
+      g.fillRoundedRect(wx, win2Y, winW, winH, { tl: 6, tr: 6, bl: 0, br: 0 });
+      g.lineStyle(1, 0x4A2E1A);
+      g.strokeRoundedRect(wx, win2Y, winW, winH, { tl: 6, tr: 6, bl: 0, br: 0 });
+    }
+
+    // Grand entrance staircase and double walnut doors
+    const doorW = 32, doorH = 34;
+    const doorX = b.x + b.w / 2 - doorW / 2;
+    const doorY = b.y + b.h - doorH;
+
+    // Stone steps
+    g.fillStyle(0xB5A48B);
+    g.fillRect(doorX - 10, b.y + b.h - 6, doorW + 20, 8);
+    g.fillRect(doorX - 6, b.y + b.h - 12, doorW + 12, 6);
+
+    // Double doors
+    g.fillStyle(0x3A2010);
+    g.fillRoundedRect(doorX, doorY, doorW, doorH, { tl: 10, tr: 10, bl: 0, br: 0 });
+    g.lineStyle(1.5, 0xC4A46C);
+    g.strokeRoundedRect(doorX, doorY, doorW, doorH, { tl: 10, tr: 10, bl: 0, br: 0 });
+
+    // Brass handles
+    g.fillStyle(0xFFD700);
+    g.fillCircle(doorX + doorW / 2 - 4, doorY + 18, 2);
+    g.fillCircle(doorX + doorW / 2 + 4, doorY + 18, 2);
+
+    // Signboard: ШТАБ-КВАРТИРА ПАРТИИ «АЛАШ»
+    const signW = 140, signH = 18;
+    const signX = b.x + b.w / 2 - signW / 2;
+    const signY = b.y + 56;
+    g.fillStyle(0x1a0a00, 0.95);
+    g.fillRoundedRect(signX, signY, signW, signH, 4);
+    g.lineStyle(1, 0xC4A46C, 0.9);
+    g.strokeRoundedRect(signX, signY, signW, signH, 4);
+
+    this.add.text(b.x + b.w / 2, signY + 9, 'ШТАБ-КВАРТИРА ПАРТИИ «АЛАШ»', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '7.5px', color: '#FFE8C0', fontStyle: 'bold', letterSpacing: 1
+    }).setOrigin(0.5).setDepth(4);
+  }
+
+  drawCheckpointTower(g, b) {
+    // Frontier Post Timber Watchtower
+    g.fillStyle(0x54361B);
+    g.fillRect(b.x, b.y + 12, b.w, b.h - 12);
+    // Timber cross-braces
+    g.lineStyle(2, 0x3A220F);
+    g.lineBetween(b.x + 4, b.y + 14, b.x + b.w - 4, b.y + b.h - 4);
+    g.lineBetween(b.x + b.w - 4, b.y + 14, b.x + 4, b.y + b.h - 4);
+
+    // Overhanging observation deck
+    g.fillStyle(0x422912);
+    g.fillRect(b.x - 6, b.y + 14, b.w + 12, 16);
+    // Observation slit windows
+    g.fillStyle(0x1A0A00);
+    g.fillRect(b.x + 10, b.y + 18, 14, 8);
+    g.fillRect(b.x + b.w - 24, b.y + 18, 14, 8);
+
+    // Shingled watchtower roof
+    g.fillStyle(0x2E1B0D);
+    g.fillTriangle(b.x - 10, b.y + 14, b.x + b.w / 2, b.y - 18, b.x + b.w + 10, b.y + 14);
+
+    // Frontier outpost lantern
+    g.fillStyle(0xFFD700, 0.6);
+    g.fillCircle(b.x + b.w / 2, b.y + 36, 4);
+  }
+
+  drawBlacksmith(g, b) {
+    // Raiymbek's Forge
+    g.fillStyle(0x52463E);
+    g.fillRoundedRect(b.x, b.y + 8, b.w, b.h - 8, 3);
+    // Brick forge chimney on right side
+    g.fillStyle(0x7E3D2D);
+    g.fillRect(b.x + b.w - 26, b.y - 18, 20, b.h + 18);
+    g.fillStyle(0x5C2B1F);
+    g.fillRect(b.x + b.w - 28, b.y - 22, 24, 6);
+
+    // Pitch slate roof
+    g.fillStyle(0x3B322C);
+    g.fillTriangle(b.x - 6, b.y + 8, b.x + b.w / 2 - 10, b.y - 20, b.x + b.w - 18, b.y + 8);
+
+    // Glowing forge window with firelight
+    g.fillStyle(0xFF5500, 0.85);
+    g.fillRoundedRect(b.x + 14, b.y + 24, 22, 20, 2);
+    g.fillStyle(0xFFD700, 0.9);
+    g.fillCircle(b.x + 25, b.y + 34, 6);
+
+    // Heavy wooden door
+    g.fillStyle(0x3D2B1A);
+    g.fillRoundedRect(b.x + 50, b.y + b.h - 26, 20, 26, { tl: 4, tr: 4, bl: 0, br: 0 });
+  }
+
+  drawMerchantManor(g, b) {
+    // Daulet-bai's Manor
+    g.fillStyle(0xB89870);
+    g.fillRoundedRect(b.x, b.y + 8, b.w, b.h - 8, 4);
+    // Roof cornice with gilded trim
+    g.fillStyle(0x6B4F37);
+    g.fillRect(b.x - 6, b.y + 4, b.w + 12, 14);
+    g.fillStyle(0xC4A46C);
+    g.fillRect(b.x - 6, b.y + 6, b.w + 12, 3);
+
+    // Arched bay windows with wrought iron grilles
+    g.fillStyle(0xD4C5A9);
+    g.fillRoundedRect(b.x + 14, b.y + 26, 22, 24, { tl: 8, tr: 8, bl: 0, br: 0 });
+    g.fillRoundedRect(b.x + b.w - 36, b.y + 26, 22, 24, { tl: 8, tr: 8, bl: 0, br: 0 });
+    g.lineStyle(1, 0x4A3520);
+    g.strokeRoundedRect(b.x + 14, b.y + 26, 22, 24, { tl: 8, tr: 8, bl: 0, br: 0 });
+    g.strokeRoundedRect(b.x + b.w - 36, b.y + 26, 22, 24, { tl: 8, tr: 8, bl: 0, br: 0 });
+
+    // Double carved walnut door
+    g.fillStyle(0x3D2614);
+    g.fillRoundedRect(b.x + b.w / 2 - 13, b.y + b.h - 28, 26, 28, { tl: 6, tr: 6, bl: 0, br: 0 });
+    g.lineStyle(1.5, 0xC4A46C);
   }
 
   drawYurt(g, cx, cy, r) {
@@ -409,8 +918,18 @@ export default class GameScene extends Phaser.Scene {
       } else {
         this.chapterProgressTxt.setText('Confront the Archivist about the packed travel chest!');
       }
+    } else if (cm.isChapterActive('ch6')) {
+      if (!cm.companion) {
+        this.chapterProgressTxt.setText('Speak with candidates in the village to choose your companion (Sadyk, Mukhamet, Raiymbek, Daulet-bai).');
+      } else if (!this.ambushResolved) {
+        this.chapterProgressTxt.setText(`Riding with ${this.getNpcDisplayName(cm.companion)}. Ride east across the Steppe Road.`);
+      } else if (!cm.isCheckpointPassed()) {
+        this.chapterProgressTxt.setText('Approach the Frontier Post and secure passage to Semey.');
+      } else {
+        this.chapterProgressTxt.setText('Deliver Abai’s manuscript to Alikhan Bokeikhanov at the Alash Headquarters!');
+      }
     } else {
-      this.chapterProgressTxt.setText('Speak with the Elder to decide the fate of the page.');
+      this.chapterProgressTxt.setText('Investigation complete.');
     }
   }
 
@@ -447,25 +966,35 @@ export default class GameScene extends Phaser.Scene {
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     this.tabKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
+    this.xKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
 
     this.interactKey.on('down', () => {
-      if (!this.dialogueActive && this.interactionTarget && !this.showingChoices) {
+      if (!this.dialogueActive && this.interactionTarget && !this.showingChoices && !this.showingEvidenceMenu) {
         this.handleInteraction(this.interactionTarget);
-      } else if (this.dialogueActive && !this.showingChoices) {
+      } else if (this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu) {
         this.advanceDialogue();
       }
     });
     this.spaceKey.on('down', () => {
-      if (this.dialogueActive && !this.showingChoices) this.advanceDialogue();
+      if (this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu) this.advanceDialogue();
     });
     this.enterKey.on('down', () => {
-      if (this.dialogueActive && !this.showingChoices) this.advanceDialogue();
+      if (this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu) this.advanceDialogue();
     });
     this.escKey.on('down', () => {
-      if (this.dialogueActive && !this.showingChoices) this.closeDialogue();
+      if (this.showingEvidenceMenu) {
+        this.closeEvidenceMenu();
+      } else if (this.dialogueActive && !this.showingChoices) {
+        this.closeDialogue();
+      }
+    });
+    this.xKey.on('down', () => {
+      if (this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu) {
+        this.openPresentEvidenceMenu(this.currentDialogueNpcKey);
+      }
     });
     this.tabKey.on('down', () => {
-      if (!this.dialogueActive && !this.showingChoices && !this.scene.isPaused() && !this.scene.isActive('EvidenceBoardScene')) {
+      if (!this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu && !this.scene.isPaused() && !this.scene.isActive('EvidenceBoardScene')) {
         this.scene.pause();
         this.scene.launch('EvidenceBoardScene', { gameScene: this });
       }
@@ -657,20 +1186,45 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Chapter 6: Final Decision
+    // Chapter 6: The Road to Semey
     if (cm.isChapterActive('ch6')) {
       if (key === 'elder') {
         this.startDialogue(key, 'chapter6_start', () => {
-          this.time.delayedCall(500, () => {
-            this.scene.pause();
-            this.scene.launch('FinalChoiceScene', { gameScene: this });
-          });
+          this.updateAllUI();
         });
+        return;
+      }
+      if (['sadyk', 'mukhamet', 'raiymbek', 'dauletbai'].includes(key)) {
+        if (!cm.companion) {
+          this.startDialogue(key, 'chapter6_offer', () => {
+            this.showCompanionRecruitmentModal(key);
+          });
+        } else if (cm.companion === key) {
+          this.startDialogueData([
+            { speaker: this.getNpcDisplayName(key), text: 'Я готов ехать с вами! Держим путь на восток через ущелье к городу Семей.' }
+          ]);
+        } else {
+          this.startDialogueData([
+            { speaker: this.getNpcDisplayName(key), text: 'Вы уже выбрали другого попутчика. Счастливого пути в Семей!' }
+          ]);
+        }
+        return;
+      }
+      if (key === 'antagonist_road') {
+        this.triggerRoadAmbush();
+        return;
+      }
+      if (key === 'post_sentry') {
+        this.triggerCheckpointEncounter();
+        return;
+      }
+      if (key === 'alash_leader') {
+        this.triggerAlashArrival();
         return;
       }
     }
 
-    // Default greeting
+    // Default greeting for other NPCs
     this.startDialogue(key, 'greeting');
   }
 
@@ -716,7 +1270,8 @@ export default class GameScene extends Phaser.Scene {
       btnBg.strokeRoundedRect(px - bw / 2, by - bh / 2, bw, bh, 8);
       this.choiceContainer.add(btnBg);
 
-      const label = `${['A', 'B', 'C'][i]}. ${choice.text}`;
+      const optionText = choice.label || choice.text || '';
+      const label = `${['A', 'B', 'C'][i]}. ${optionText}`;
       const btnText = this.add.text(px, by, label, {
         fontFamily: 'Lora, Georgia, serif', fontSize: '13px', color: '#D4C5A9',
         wordWrap: { width: bw - 30 }, align: 'center',
@@ -949,6 +1504,7 @@ export default class GameScene extends Phaser.Scene {
 
   // ==================== DIALOGUE ====================
   startDialogue(npcKey, dialogKey, onComplete) {
+    this.currentDialogueNpcKey = npcKey;
     const dialogueData = DIALOGUE[npcKey];
     if (!dialogueData || !dialogueData[dialogKey]) {
       if (onComplete) onComplete();
@@ -997,6 +1553,18 @@ export default class GameScene extends Phaser.Scene {
     this.dialogueContentText = this.add.text(bx + 20, by + 44, '', { fontFamily: 'Lora, Georgia, serif', fontSize: '15px', color: '#E8D5B0', wordWrap: { width: boxW - 48 }, lineSpacing: 5 });
     this.dialogueContainer.add(this.dialogueContentText);
 
+    // Present evidence button [X]
+    const presentBtn = this.add.text(bx + 20, by + boxH - 24, '[X] ПОКАЗАТЬ УЛИКУ', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '11px', color: '#D4C5A9', letterSpacing: 1
+    }).setInteractive({ useHandCursor: true });
+    presentBtn.on('pointerover', () => presentBtn.setColor('#FFD700'));
+    presentBtn.on('pointerout', () => presentBtn.setColor('#D4C5A9'));
+    presentBtn.on('pointerdown', (e) => {
+      if (e && e.event) e.event.stopPropagation();
+      this.openPresentEvidenceMenu(this.currentDialogueNpcKey);
+    });
+    this.dialogueContainer.add(presentBtn);
+
     this.continueHint = this.add.text(bx + boxW - 22, by + boxH - 24, '▶ [SPACE / CLICK]', { fontFamily: 'Cinzel, Georgia, serif', fontSize: '11px', color: '#C4A46C' }).setOrigin(1, 0).setAlpha(0);
     this.dialogueContainer.add(this.continueHint);
 
@@ -1004,13 +1572,14 @@ export default class GameScene extends Phaser.Scene {
     const clickArea = this.add.rectangle(bx + boxW / 2, by + boxH / 2, boxW, boxH, 0x000000, 0.001)
       .setInteractive({ useHandCursor: true });
     clickArea.on('pointerdown', () => {
-      if (this.dialogueActive && !this.showingChoices) this.advanceDialogue();
+      if (this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu) this.advanceDialogue();
     });
     this.dialogueContainer.add(clickArea);
   }
 
   showCurrentDialogue() {
     if (this.dialogueIndex >= this.dialogueQueue.length) { this.closeDialogue(); return; }
+    soundManager.playPaperRustle();
     const msg = this.dialogueQueue[this.dialogueIndex];
     this.speakerText.setText('◆  ' + msg.speaker.toUpperCase());
     this.continueHint.setAlpha(0);
@@ -1091,5 +1660,494 @@ export default class GameScene extends Phaser.Scene {
   createAmbientParticles() {
     this.add.particles(0, 0, 'particle', { x: { min: 0, max: MAP_WIDTH }, y: { min: 0, max: MAP_HEIGHT }, lifespan: { min: 5000, max: 10000 }, speed: { min: 1, max: 6 }, scale: { start: 0.5, end: 0 }, alpha: { start: 0.12, end: 0 }, frequency: 500, quantity: 1, tint: 0xE8D5B0 }).setDepth(1);
     this.add.particles(0, 0, 'particle', { x: { min: 0, max: MAP_WIDTH }, y: { min: 0, max: MAP_HEIGHT }, lifespan: { min: 6000, max: 12000 }, speed: { min: 2, max: 10 }, scale: { start: 0.4, end: 0 }, alpha: { start: 0.15, end: 0 }, frequency: 900, quantity: 1, tint: 0xFFE8C0 }).setDepth(1);
+  }
+
+  // ==================== CHAPTER 6: RECRUITMENT & ROAD JOURNEY ====================
+  showCompanionRecruitmentModal(candidateKey) {
+    this.showingChoices = true;
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const candidateData = COMPANIONS.find(c => c.id === candidateKey) || {
+      name: candidateKey,
+      title: candidateKey,
+      desc: '',
+      virtue: ''
+    };
+
+    const container = this.add.container(0, 0).setDepth(100).setScrollFactor(0);
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.6).setInteractive();
+    container.add(overlay);
+
+    const panelW = 560, panelH = 260, px = w / 2, py = h / 2;
+    const panel = this.add.graphics();
+    panel.fillStyle(0x2A1506, 0.98);
+    panel.fillRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
+    panel.lineStyle(2, 0xC4A46C, 0.85);
+    panel.strokeRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
+    container.add(panel);
+
+    const title = this.add.text(px, py - panelH / 2 + 25, '◆  ВЫБОР НАПАРНИКА В ДОРОГУ  ◆', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '15px', color: '#C4A46C', letterSpacing: 2
+    }).setOrigin(0.5);
+    container.add(title);
+
+    const candName = this.add.text(px, py - panelH / 2 + 55, candidateData.title, {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '17px', color: '#FFE8C0'
+    }).setOrigin(0.5);
+    container.add(candName);
+
+    const candDesc = this.add.text(px, py - panelH / 2 + 90, candidateData.desc, {
+      fontFamily: 'Lora, Georgia, serif', fontSize: '12.5px', color: '#D4C5A9', align: 'center',
+      wordWrap: { width: panelW - 50 }
+    }).setOrigin(0.5);
+    container.add(candDesc);
+
+    // Buttons: [A] RECRUIT, [B] THINK MORE
+    const btnW = 230, btnH = 42;
+    const btnY = py + panelH / 2 - 42;
+
+    // Button A
+    const btnABg = this.add.graphics();
+    btnABg.fillStyle(0x3D2B1A, 0.95);
+    btnABg.fillRoundedRect(px - btnW - 10, btnY - btnH / 2, btnW, btnH, 8);
+    btnABg.lineStyle(1.5, 0xC4A46C, 0.8);
+    btnABg.strokeRoundedRect(px - btnW - 10, btnY - btnH / 2, btnW, btnH, 8);
+    container.add(btnABg);
+
+    const btnATxt = this.add.text(px - btnW / 2 - 10, btnY, '[A] ВЗЯТЬ В НАПАРНИКИ', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '12px', color: '#FFE8C0', letterSpacing: 1
+    }).setOrigin(0.5);
+    container.add(btnATxt);
+
+    const hitA = this.add.rectangle(px - btnW / 2 - 10, btnY, btnW, btnH, 0x000000, 0.01)
+      .setInteractive({ useHandCursor: true });
+    container.add(hitA);
+
+    // Button B
+    const btnBBg = this.add.graphics();
+    btnBBg.fillStyle(0x2A1506, 0.95);
+    btnBBg.fillRoundedRect(px + 10, btnY - btnH / 2, btnW, btnH, 8);
+    btnBBg.lineStyle(1, 0x8B7355, 0.6);
+    btnBBg.strokeRoundedRect(px + 10, btnY - btnH / 2, btnW, btnH, 8);
+    container.add(btnBBg);
+
+    const btnBTxt = this.add.text(px + btnW / 2 + 10, btnY, '[B] ПОДУМАТЬ ЕЩЕ', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '12px', color: '#D4C5A9', letterSpacing: 1
+    }).setOrigin(0.5);
+    container.add(btnBTxt);
+
+    const hitB = this.add.rectangle(px + btnW / 2 + 10, btnY, btnW, btnH, 0x000000, 0.01)
+      .setInteractive({ useHandCursor: true });
+    container.add(hitB);
+
+    const cleanup = () => {
+      this.showingChoices = false;
+      this.input.keyboard.off('keydown-A', onChooseA);
+      this.input.keyboard.off('keydown-B', onChooseB);
+      container.destroy();
+    };
+
+    const onChooseA = () => {
+      cleanup();
+      this.chapterManager.setCompanion(candidateKey);
+      this.createFollowerCompanion(candidateKey);
+      soundManager.playClueChime();
+      this.startDialogue(candidateKey, 'accepted', () => {
+        this.showQuestCompleteEffect(
+          'НАПАРНИК ВЫБРАН!',
+          `Вы отправляетесь в путь вместе с ${candidateData.name}!\nДержите путь на восток по Степной дороге в Семей.`,
+          '+10 Heritage Points'
+        );
+        this.chapterManager.addPoints(10);
+        this.updateAllUI();
+      });
+    };
+
+    const onChooseB = () => {
+      cleanup();
+    };
+
+    hitA.on('pointerdown', onChooseA);
+    hitB.on('pointerdown', onChooseB);
+    this.input.keyboard.once('keydown-A', onChooseA);
+    this.input.keyboard.once('keydown-B', onChooseB);
+  }
+
+  triggerRoadAmbush() {
+    this.player.setVelocity(0, 0);
+    soundManager.playEncounterTension();
+    const companion = this.chapterManager.companion;
+
+    if (companion === 'sadyk') {
+      this.startDialogue('antagonist_road', 'sadyk_betrayal', () => {
+        this.showDefeatModal(
+          'ТРАГИЧЕСКИЙ ФИНАЛ: ПРЕДАТЕЛЬСТВО',
+          'Садық оказался сообщником степных разбойников!',
+          'Садық заранее сговорился с засадой ради кошеля золота. В узком ущелье исследователь пал, а драгоценная страница со списком 12 переписчиков была захвачена...'
+        );
+      });
+    } else if (companion === 'mukhamet') {
+      this.startDialogue('antagonist_road', 'mukhamet_theft', () => {
+        this.showDefeatModal(
+          'ТРАГИЧЕСКИЙ ФИНАЛ: КОРЫСТНЫЙ ПИСАРЬ',
+          'Мұхамет украл список ради царского чина и награды!',
+          'Мұхамет выстрелил в вашего коня, выхватил сумку с рукописями и сдал имена 12 переписчиков царским властям. Вскоре аул окружили каратели, и переписчики были казнены...'
+        );
+      });
+    } else if (companion === 'raiymbek') {
+      this.startDialogue('antagonist_road', 'raiymbek_heroic', () => {
+        this.cameras.main.shake(600, 0.02);
+        soundManager.playBattleClash();
+        this.time.delayedCall(220, () => soundManager.playBattleClash());
+        this.time.delayedCall(450, () => soundManager.playBattleClash());
+
+        const antagonistNpc = this.npcs.find(n => n.dialogKey === 'antagonist_road');
+        if (antagonistNpc) {
+          this.tweens.add({
+            targets: antagonistNpc,
+            x: antagonistNpc.x + 100,
+            y: antagonistNpc.y - 120,
+            alpha: 0,
+            duration: 900,
+            ease: 'Cubic.easeIn',
+            onComplete: () => {
+              antagonistNpc.setVisible(false);
+            }
+          });
+        }
+        this.ambushResolved = true;
+        this.chapterManager.addPoints(10);
+        this.showQuestCompleteEffect(
+          'БАТЫР РАЙЫМБЕК СОКРУШИЛ ЗАСАДУ!',
+          'Клинком предков Райымбек разогнал разбойников в ущелье!\nДорога к пограничному посту свободна.',
+          '+10 Heritage Points'
+        );
+        this.updateAllUI();
+      });
+    } else if (companion === 'dauletbai') {
+      this.startDialogue('antagonist_road', 'dauletbai_diplomatic', () => {
+        soundManager.playCoins();
+        this.time.delayedCall(200, () => soundManager.playCoins());
+        this.time.delayedCall(400, () => soundManager.playCoins());
+
+        const antagonistNpc = this.npcs.find(n => n.dialogKey === 'antagonist_road');
+        if (antagonistNpc) {
+          this.tweens.add({
+            targets: antagonistNpc,
+            x: antagonistNpc.x + 80,
+            y: antagonistNpc.y + 120,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Cubic.easeIn',
+            onComplete: () => {
+              antagonistNpc.setVisible(false);
+            }
+          });
+        }
+        this.ambushResolved = true;
+        this.chapterManager.addPoints(10);
+        this.showQuestCompleteEffect(
+          'ДӘУЛЕТБАЙ ПОДКУПИЛ ЗАСАДУ!',
+          'Царские червонцы решили дело без единой капли крови!\nДорога к пограничному посту открыта.',
+          '+10 Heritage Points'
+        );
+        this.updateAllUI();
+      });
+    }
+  }
+
+  showDefeatModal(title, subtitle, description) {
+    soundManager.playEncounterTension();
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const container = this.add.container(0, 0).setDepth(150).setScrollFactor(0);
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x1a0505, 0.88).setInteractive();
+    container.add(overlay);
+
+    const panelW = 580, panelH = 310;
+    const px = w / 2, py = h / 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x250d0d, 0.98);
+    bg.fillRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
+    bg.lineStyle(2, 0xC44040, 0.9);
+    bg.strokeRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
+    container.add(bg);
+
+    const skullIcon = this.add.text(px, py - panelH / 2 + 34, '⚔', {
+      fontFamily: 'serif', fontSize: '26px', color: '#E05050'
+    }).setOrigin(0.5);
+    container.add(skullIcon);
+
+    const titleTxt = this.add.text(px, py - panelH / 2 + 66, title, {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '17px', color: '#FF7070', letterSpacing: 2
+    }).setOrigin(0.5);
+    container.add(titleTxt);
+
+    const subTxt = this.add.text(px, py - panelH / 2 + 94, subtitle, {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '13px', color: '#D4A0A0', fontStyle: 'italic'
+    }).setOrigin(0.5);
+    container.add(subTxt);
+
+    const descTxt = this.add.text(px, py - 6, description, {
+      fontFamily: 'Lora, Georgia, serif', fontSize: '13px', color: '#E8D5B0', align: 'center',
+      wordWrap: { width: panelW - 60 }, lineSpacing: 4
+    }).setOrigin(0.5);
+    container.add(descTxt);
+
+    // Retry button
+    const btnW = 240, btnH = 46;
+    const btnY = py + panelH / 2 - 42;
+
+    const btnBg = this.add.graphics();
+    const drawBtn = (hovered = false) => {
+      btnBg.clear();
+      btnBg.fillStyle(hovered ? 0x7A2828 : 0x5C2020, 0.95);
+      btnBg.fillRoundedRect(px - btnW / 2, btnY - btnH / 2, btnW, btnH, 8);
+      btnBg.lineStyle(1.5, hovered ? 0xFF7070 : 0xC44040, 0.9);
+      btnBg.strokeRoundedRect(px - btnW / 2, btnY - btnH / 2, btnW, btnH, 8);
+    };
+    drawBtn(false);
+    container.add(btnBg);
+
+    const btnTxt = this.add.text(px, btnY, 'Try again', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '15px', color: '#FFE8C0', letterSpacing: 2
+    }).setOrigin(0.5);
+    container.add(btnTxt);
+
+    const hitArea = this.add.rectangle(px, btnY, btnW, btnH, 0x000000, 0.01)
+      .setInteractive({ useHandCursor: true });
+    container.add(hitArea);
+
+    hitArea.on('pointerover', () => {
+      drawBtn(true);
+      btnTxt.setColor('#FFFFFF');
+    });
+
+    hitArea.on('pointerout', () => {
+      drawBtn(false);
+      btnTxt.setColor('#FFE8C0');
+    });
+
+    hitArea.on('pointerdown', () => {
+      soundManager.playPaperRustle();
+      container.destroy();
+      this.ambushTriggered = false;
+      this.chapterManager.clearCompanion();
+      if (this.followerCompanion) {
+        this.followerCompanion.destroy();
+        this.followerCompanion = null;
+      }
+      if (this.followerShadow) {
+        this.followerShadow.destroy();
+        this.followerShadow = null;
+      }
+      this.player.setPosition(1530, 560);
+      this.updateAllUI();
+    });
+  }
+
+  triggerCheckpointEncounter() {
+    this.player.setVelocity(0, 0);
+    const companion = this.chapterManager.companion;
+    const dialogBranch = companion === 'dauletbai' ? 'dauletbai_pass' : 'raiymbek_pass';
+
+    this.startDialogue('post_sentry', dialogBranch, () => {
+      this.chapterManager.passCheckpoint();
+      soundManager.playClueChime();
+      if (this.checkpointBeam) {
+        this.tweens.add({
+          targets: this.checkpointBeam,
+          angle: -75,
+          duration: 1000,
+          ease: 'Bounce.easeOut'
+        });
+      }
+      this.chapterManager.addPoints(10);
+      this.showQuestCompleteEffect(
+        'ПОГРАНИЧНЫЙ ПОСТ ПРОЙДЕН!',
+        'Шлагбаум поднят. Перед вами открывается город Семей!\nНаправляйтесь к Штаб-квартире партии «Алаш».',
+        '+10 Heritage Points'
+      );
+      this.updateAllUI();
+    });
+  }
+
+  triggerAlashArrival() {
+    this.player.setVelocity(0, 0);
+    this.startDialogue('alash_leader', 'arrival', () => {
+      soundManager.playVictoryFanfare();
+      this.chapterManager.completeChapter('ch6');
+      const companionId = this.chapterManager.companion || 'raiymbek';
+      this.chapterManager.setFinalChoice(companionId);
+
+      let transitioned = false;
+      const transitionToFinal = () => {
+        if (transitioned) return;
+        transitioned = true;
+
+        const choiceObj = FINAL_CHOICES.find(c => c.id === companionId) || FINAL_CHOICES[0];
+        const trustVal = typeof this.chapterManager.getAverageTrust === 'function' ? this.chapterManager.getAverageTrust() : 75;
+        const trustLevel = trustVal >= 60 ? 'high' : 'low';
+        const epilogueText = (EPILOGUES[choiceObj.id] && EPILOGUES[choiceObj.id][trustLevel]) ||
+          'Рукописи великого Абая и список 12 переписчиков благополучно переданы лидерам партии «Алаш» в городе Семей.';
+        const points = typeof this.chapterManager.getPoints === 'function' ? this.chapterManager.getPoints() : 100;
+        const rank = typeof this.chapterManager.getRank === 'function' ? this.chapterManager.getRank() : 'HERITAGE KEEPER';
+
+        this.scene.start('FinalScene', {
+          points: points,
+          rank: rank,
+          ending: choiceObj,
+          epilogueText: epilogueText,
+          trust: trustVal,
+        });
+      };
+
+      this.cameras.main.fadeOut(1000, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', transitionToFinal);
+      this.time.delayedCall(1100, transitionToFinal);
+    });
+  }
+
+  // ==================== PRESENT EVIDENCE IN DIALOGUES ====================
+  openPresentEvidenceMenu(npcKey) {
+    if (!npcKey) return;
+    const clues = this.chapterManager.getFoundEvidence();
+    if (clues.length === 0) {
+      this.showFloatingNotice('У вас пока нет собранных улик. Осмотрите аул (TAB: Дело).');
+      return;
+    }
+
+    this.showingEvidenceMenu = true;
+    soundManager.playPaperRustle();
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+
+    this.evidenceMenuContainer = this.add.container(0, 0).setDepth(110).setScrollFactor(0);
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.65).setInteractive();
+    this.evidenceMenuContainer.add(overlay);
+
+    const panelW = 600, panelH = 340, px = w / 2, py = h / 2;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x2A1506, 0.98);
+    bg.fillRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
+    bg.lineStyle(2, 0xC4A46C, 0.85);
+    bg.strokeRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
+    this.evidenceMenuContainer.add(bg);
+
+    const title = this.add.text(px, py - panelH / 2 + 22, '◆  ПРЕДЪЯВИТЬ УЛИКУ  ◆', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '15px', color: '#C4A46C', letterSpacing: 2
+    }).setOrigin(0.5);
+    this.evidenceMenuContainer.add(title);
+
+    const subtitle = this.add.text(px, py - panelH / 2 + 42, `Собеседник: ${this.getNpcDisplayName(npcKey)}`, {
+      fontFamily: 'Lora, Georgia, serif', fontSize: '12px', color: '#D4C5A9', fontStyle: 'italic'
+    }).setOrigin(0.5);
+    this.evidenceMenuContainer.add(subtitle);
+
+    const startY = py - 95;
+    const cardW = 540, cardH = 38;
+    this.evidenceKeyListeners = [];
+
+    clues.slice(0, 5).forEach((clue, idx) => {
+      const cy = startY + idx * 46;
+      const cardBg = this.add.graphics();
+      cardBg.fillStyle(0x3D2B1A, 0.95);
+      cardBg.fillRoundedRect(px - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
+      cardBg.lineStyle(1, 0x8B7355, 0.6);
+      cardBg.strokeRoundedRect(px - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
+      this.evidenceMenuContainer.add(cardBg);
+
+      const isPresented = this.chapterManager.isCluePresented(npcKey, clue.id);
+      const tag = isPresented ? ' [УЖЕ ПОКАЗАНО]' : '';
+      const cardTxt = this.add.text(px - cardW / 2 + 16, cy, `[${idx + 1}]  ${clue.name}${tag}`, {
+        fontFamily: 'Cinzel, Georgia, serif', fontSize: '12.5px', color: isPresented ? '#A0896C' : '#FFE8C0'
+      }).setOrigin(0, 0.5);
+      this.evidenceMenuContainer.add(cardTxt);
+
+      const hit = this.add.rectangle(px, cy, cardW, cardH, 0x000000, 0.01)
+        .setInteractive({ useHandCursor: true });
+      this.evidenceMenuContainer.add(hit);
+
+      const onSelect = () => this.handlePresentClue(npcKey, clue);
+      hit.on('pointerover', () => {
+        cardBg.clear();
+        cardBg.fillStyle(0x5C3A1E, 0.98);
+        cardBg.fillRoundedRect(px - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
+        cardBg.lineStyle(1.5, 0xC4A46C, 0.9);
+        cardBg.strokeRoundedRect(px - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
+      });
+      hit.on('pointerout', () => {
+        cardBg.clear();
+        cardBg.fillStyle(0x3D2B1A, 0.95);
+        cardBg.fillRoundedRect(px - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
+        cardBg.lineStyle(1, 0x8B7355, 0.6);
+        cardBg.strokeRoundedRect(px - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
+      });
+      hit.on('pointerdown', onSelect);
+
+      const numKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE + idx);
+      numKey.once('down', onSelect);
+      this.evidenceKeyListeners.push({ key: numKey, fn: onSelect });
+    });
+
+    const closeBtn = this.add.text(px, py + panelH / 2 - 24, '[ ЗАКРЫТЬ (ESC) ]', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '12px', color: '#C4A46C', letterSpacing: 1
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.evidenceMenuContainer.add(closeBtn);
+
+    const onClose = () => this.closeEvidenceMenu();
+    closeBtn.on('pointerdown', onClose);
+    overlay.on('pointerdown', onClose);
+  }
+
+  closeEvidenceMenu() {
+    if (this.evidenceKeyListeners) {
+      this.evidenceKeyListeners.forEach(({ key, fn }) => key.off('down', fn));
+      this.evidenceKeyListeners = [];
+    }
+    if (this.evidenceMenuContainer) {
+      this.evidenceMenuContainer.destroy();
+      this.evidenceMenuContainer = null;
+    }
+    this.showingEvidenceMenu = false;
+  }
+
+  handlePresentClue(npcKey, clue) {
+    this.closeEvidenceMenu();
+    soundManager.playPaperRustle();
+    const reactions = DIALOGUE.reactions && DIALOGUE.reactions[npcKey];
+    const reactionText = (reactions && reactions[clue.id]) || (reactions && reactions.default) || 'Интересный предмет, но мне нечего о нем сказать.';
+
+    const isNew = this.chapterManager.markCluePresented(npcKey, clue.id);
+    if (isNew && reactions && reactions[clue.id]) {
+      this.chapterManager.addPoints(5);
+      this.chapterManager.adjustTrust(npcKey, 5);
+      soundManager.playClueChime();
+      this.showFloatingNotice('+5 Heritage Points (Новая зацепка раскрыта!)');
+      this.updateAllUI();
+    }
+
+    this.startDialogueData([
+      { speaker: 'Исследователь', text: `Посмотрите на эту улику: «${clue.name}». Что вы знаете об этом?` },
+      { speaker: this.getNpcDisplayName(npcKey), text: reactionText }
+    ]);
+  }
+
+  getNpcDisplayName(key) {
+    const map = {
+      elder: 'Старейшина аула',
+      teacher: 'Учитель',
+      archivist: 'Архивариус',
+      sadyk: 'Садық (Проводник)',
+      mukhamet: 'Мұхамет (Писарь)',
+      raiymbek: 'Райымбек (Кузнец)',
+      dauletbai: 'Дәулетбай (Купец)',
+      antagonist_road: 'Главарь засады',
+      post_sentry: 'Офицер поста',
+      alash_leader: 'Алихан Бокейханов'
+    };
+    return map[key] || key.toUpperCase();
   }
 }

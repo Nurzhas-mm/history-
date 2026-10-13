@@ -146,6 +146,14 @@ export default class BootScene extends Phaser.Scene {
     this.createElderTexture();
     this.createTeacherTexture();
     this.createArchivistTexture();
+    this.createSadykTexture();
+    this.createMukhametTexture();
+    this.createRaiymbekTexture();
+    this.createDauletbaiTexture();
+    this.createAntagonistTexture();
+    this.createAlashLeaderTexture();
+    this.createCheckpointTexture();
+    this.createAlashBannerTexture();
   }
 
   createElderTexture() {
@@ -318,6 +326,283 @@ export default class BootScene extends Phaser.Scene {
     g.fillCircle(24, 34, 1.5);
 
     g.generateTexture('npc_archivist', size, size);
+    g.destroy();
+  }
+
+  createSadykTexture() {
+    const size = 48;
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(size / 2, size - 4, 28, 10);
+    // Body (herdsman teal-greenish tunic)
+    g.fillStyle(0x2E5B54);
+    g.fillRoundedRect(11, 14, 26, 28, 6);
+    g.fillStyle(0x407A70);
+    g.fillRect(19, 16, 10, 26);
+    // Arms
+    g.fillStyle(0x2E5B54);
+    g.fillRoundedRect(7, 16, 10, 16, 3);
+    g.fillRoundedRect(31, 16, 10, 16, 3);
+    // Head & face
+    g.fillStyle(0xC89E70);
+    g.fillCircle(24, 9, 7.5);
+    // Fox/wolf fur hat (Tymak)
+    g.fillStyle(0x9E5B32);
+    g.fillRoundedRect(15, 0, 18, 10, { tl: 7, tr: 7, bl: 2, br: 2 });
+    g.fillStyle(0xD48B55);
+    g.fillCircle(24, 1, 3);
+    // Whip (qamshy) in hand
+    g.lineStyle(1.5, 0x4A2A15);
+    g.lineBetween(36, 24, 43, 38);
+    // Eyes (cunning glance)
+    g.fillStyle(0x1a0a00);
+    g.fillCircle(22, 9, 1);
+    g.fillCircle(26, 9, 1);
+    // Boots
+    g.fillStyle(0x2A1506);
+    g.fillRect(15, 40, 7, 6);
+    g.fillRect(26, 40, 7, 6);
+    g.generateTexture('npc_sadyk', size, size);
+    g.destroy();
+  }
+
+  createMukhametTexture() {
+    const size = 48;
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(size / 2, size - 4, 28, 10);
+    // Body (dark urban bureaucrat coat)
+    g.fillStyle(0x2F3542);
+    g.fillRoundedRect(11, 14, 26, 28, 6);
+    g.fillStyle(0x57606F);
+    g.fillRect(20, 16, 8, 26);
+    // Arms
+    g.fillStyle(0x2F3542);
+    g.fillRoundedRect(7, 16, 10, 16, 3);
+    g.fillRoundedRect(31, 16, 10, 16, 3);
+    // Head
+    g.fillStyle(0xD8B28A);
+    g.fillCircle(24, 9, 7.5);
+    // Small dark hat / visor cap
+    g.fillStyle(0x1E272E);
+    g.fillRoundedRect(16, 2, 16, 8, { tl: 4, tr: 4, bl: 0, br: 0 });
+    g.fillStyle(0xC4A46C, 0.6);
+    g.fillRect(16, 7, 16, 1.5);
+    // Glasses
+    g.lineStyle(1, 0xC4A46C);
+    g.strokeCircle(21, 9, 2.5);
+    g.strokeCircle(27, 9, 2.5);
+    g.lineBetween(23.5, 9, 24.5, 9);
+    // Ledger under arm
+    g.fillStyle(0x8B1E1E);
+    g.fillRect(6, 26, 8, 10);
+    // Boots
+    g.fillStyle(0x1E272E);
+    g.fillRect(15, 40, 7, 6);
+    g.fillRect(26, 40, 7, 6);
+    g.generateTexture('npc_mukhamet', size, size);
+    g.destroy();
+  }
+
+  createRaiymbekTexture() {
+    const size = 48;
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(size / 2, size - 4, 28, 10);
+    // Broad muscular body with leather smith apron
+    g.fillStyle(0x7D3C1B);
+    g.fillRoundedRect(9, 13, 30, 29, 7);
+    g.fillStyle(0x4A2511);
+    g.fillRect(17, 15, 14, 27);
+    // Strong bare muscular arms with iron bracers
+    g.fillStyle(0xC48C60);
+    g.fillRoundedRect(5, 15, 11, 17, 4);
+    g.fillRoundedRect(32, 15, 11, 17, 4);
+    g.fillStyle(0x2A2A2A);
+    g.fillRect(5, 25, 11, 4);
+    g.fillRect(32, 25, 11, 4);
+    // Head with resolute expression
+    g.fillStyle(0xC48C60);
+    g.fillCircle(24, 9, 8);
+    // Red warrior headband / Taqiya with batyr crescent
+    g.fillStyle(0x9E1B1B);
+    g.fillRoundedRect(16, 2, 16, 8, { tl: 5, tr: 5, bl: 0, br: 0 });
+    g.fillStyle(0xFFD700);
+    g.fillCircle(24, 6, 2);
+    // Hammer / Ancestral saber hilt on back
+    g.fillStyle(0x555555);
+    g.fillRect(36, 12, 6, 18);
+    g.fillStyle(0x9E1B1B);
+    g.fillRect(35, 10, 8, 4);
+    // Fierce eyes & mustache
+    g.fillStyle(0x1a0a00);
+    g.fillCircle(21, 9, 1.2);
+    g.fillCircle(27, 9, 1.2);
+    g.fillRect(19, 13, 10, 2);
+    // Heavy boots
+    g.fillStyle(0x2A1506);
+    g.fillRect(14, 40, 8, 6);
+    g.fillRect(26, 40, 8, 6);
+    g.generateTexture('npc_raiymbek', size, size);
+    g.destroy();
+  }
+
+  createDauletbaiTexture() {
+    const size = 48;
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(size / 2, size - 4, 28, 10);
+    // Wealthy wide velvet robe (crimson with gold embroidery)
+    g.fillStyle(0x8B152B);
+    g.fillRoundedRect(8, 13, 32, 29, 8);
+    g.fillStyle(0xDAA520);
+    g.fillRect(18, 14, 12, 28);
+    g.fillStyle(0xFFFFFF);
+    g.fillRoundedRect(15, 14, 18, 5, 2); // Astrakhan fur collar
+    // Wide arms in velvet
+    g.fillStyle(0x8B152B);
+    g.fillRoundedRect(4, 15, 12, 16, 4);
+    g.fillRoundedRect(32, 15, 12, 16, 4);
+    // Head (jovial dignified merchant)
+    g.fillStyle(0xD4A070);
+    g.fillCircle(24, 8, 8);
+    // Opulent tall Borik hat trimmed with sable fur
+    g.fillStyle(0x8B152B);
+    g.fillRoundedRect(16, 0, 16, 9, { tl: 6, tr: 6, bl: 0, br: 0 });
+    g.fillStyle(0x3D2415);
+    g.fillRect(15, 6, 18, 4);
+    g.fillStyle(0xFFD700);
+    g.fillCircle(24, 1, 2.5);
+    // Silver coin pouch at belt
+    g.fillStyle(0xC0C0C0);
+    g.fillCircle(28, 30, 4);
+    g.lineStyle(1, 0xFFD700);
+    g.strokeCircle(28, 30, 4);
+    // Boots with embroidery
+    g.fillStyle(0x2A1506);
+    g.fillRect(14, 40, 8, 6);
+    g.fillRect(26, 40, 8, 6);
+    g.generateTexture('npc_dauletbai', size, size);
+    g.destroy();
+  }
+
+  createAntagonistTexture() {
+    const size = 48;
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.3);
+    g.fillEllipse(size / 2, size - 4, 28, 10);
+    // Dark ominous steppe cape
+    g.fillStyle(0x1F1F24);
+    g.fillRoundedRect(9, 13, 30, 29, 7);
+    g.fillStyle(0x2E1C18);
+    g.fillRect(18, 15, 12, 27);
+    // Armed arms with weapon
+    g.fillStyle(0x1F1F24);
+    g.fillRoundedRect(5, 15, 11, 16, 3);
+    g.fillRoundedRect(32, 15, 11, 16, 3);
+    // Steel saber in hand
+    g.lineStyle(2, 0xC0C0C0);
+    g.lineBetween(36, 26, 44, 40);
+    g.fillStyle(0xDAA520);
+    g.fillCircle(36, 25, 2.5);
+    // Masked face / dark eyes
+    g.fillStyle(0xC09068);
+    g.fillCircle(24, 9, 7.5);
+    g.fillStyle(0x111115);
+    g.fillRect(17, 10, 14, 5); // Scarf / mask
+    // Dark fur papakha
+    g.fillStyle(0x151515);
+    g.fillRoundedRect(16, 1, 16, 9, { tl: 5, tr: 5, bl: 0, br: 0 });
+    // Eyes looking sharp
+    g.fillStyle(0xFFE8C0);
+    g.fillCircle(21, 8, 1.2);
+    g.fillCircle(27, 8, 1.2);
+    // Heavy boots
+    g.fillStyle(0x0A0A0A);
+    g.fillRect(14, 40, 8, 6);
+    g.fillRect(26, 40, 8, 6);
+    g.generateTexture('npc_antagonist', size, size);
+    g.destroy();
+  }
+
+  createAlashLeaderTexture() {
+    const size = 48;
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(size / 2, size - 4, 28, 10);
+    // Noble black European intellectual suit with tie and wool overcoat
+    g.fillStyle(0x1A1E24);
+    g.fillRoundedRect(10, 13, 28, 29, 6);
+    g.fillStyle(0xFFFFFF);
+    g.fillTriangle(20, 14, 28, 14, 24, 24); // white shirt collar
+    g.fillStyle(0x8B1A1A);
+    g.fillRect(23, 17, 2, 7); // crimson tie
+    // Arms
+    g.fillStyle(0x1A1E24);
+    g.fillRoundedRect(6, 15, 10, 16, 3);
+    g.fillRoundedRect(32, 15, 10, 16, 3);
+    // Dignified head
+    g.fillStyle(0xE0C0A0);
+    g.fillCircle(24, 8, 7.5);
+    // Famous Alash Astrakhan karakul papakha hat
+    g.fillStyle(0x222226);
+    g.fillRoundedRect(16, 0, 16, 9, { tl: 6, tr: 6, bl: 0, br: 0 });
+    // Intellectual glasses & mustache
+    g.lineStyle(1, 0xFFD700);
+    g.strokeCircle(21, 7.5, 2.5);
+    g.strokeCircle(27, 7.5, 2.5);
+    g.lineBetween(23.5, 7.5, 24.5, 7.5);
+    g.fillStyle(0x2A1506);
+    g.fillRect(20, 11, 8, 2); // neat mustache
+    // Roll of official Alash newspaper / declaration in hand
+    g.fillStyle(0xFFF8DC);
+    g.fillRect(34, 25, 9, 5);
+    // Polished shoes
+    g.fillStyle(0x0F0F12);
+    g.fillRect(15, 40, 7, 6);
+    g.fillRect(26, 40, 7, 6);
+    g.generateTexture('npc_alash_leader', size, size);
+    g.destroy();
+  }
+
+  createCheckpointTexture() {
+    const size = 64;
+    const g = this.make.graphics({ add: false });
+    // Checkpoint post pillar
+    g.fillStyle(0x4A3520);
+    g.fillRect(4, 8, 10, 52);
+    g.fillStyle(0x5C3A1E);
+    g.fillRect(2, 6, 14, 6);
+    // Red and white striped barrier beam
+    for (let x = 14; x < 62; x += 12) {
+      g.fillStyle(0xB82626);
+      g.fillRect(x, 18, 6, 6);
+      g.fillStyle(0xF0F0F0);
+      g.fillRect(x + 6, 18, 6, 6);
+    }
+    // Lantern on post
+    g.fillStyle(0xFFD700);
+    g.fillCircle(9, 4, 3);
+    g.generateTexture('barrier_post', size, size);
+    g.destroy();
+  }
+
+  createAlashBannerTexture() {
+    const w = 48, h = 32;
+    const g = this.make.graphics({ add: false });
+    // Turquoise blue flag of freedom and sky
+    g.fillStyle(0x00A896);
+    g.fillRect(0, 0, w, h);
+    g.lineStyle(1.5, 0xC4A46C);
+    g.strokeRect(1, 1, w - 2, h - 2);
+    // Golden star and crescent
+    g.fillStyle(0xFFD700);
+    g.fillCircle(w / 2 - 4, h / 2, 8);
+    g.fillStyle(0x00A896);
+    g.fillCircle(w / 2 - 2, h / 2, 7);
+    g.fillStyle(0xFFD700);
+    g.fillCircle(w / 2 + 7, h / 2, 3);
+    g.generateTexture('alash_banner', w, h);
     g.destroy();
   }
 

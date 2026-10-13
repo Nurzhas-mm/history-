@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { soundManager } from '../systems/SoundManager.js';
 
 export default class EvidenceBoardScene extends Phaser.Scene {
   constructor() {
@@ -10,6 +11,7 @@ export default class EvidenceBoardScene extends Phaser.Scene {
     this.cm = data.gameScene.chapterManager;
     this.selectedForDeduction = [];
     this.cardVisuals = new Map();
+    this.activeTab = 'evidence'; // 'evidence' | 'witnesses'
   }
 
   create() {
@@ -33,16 +35,22 @@ export default class EvidenceBoardScene extends Phaser.Scene {
       letterSpacing: 2,
     }).setOrigin(0.5);
 
-    // Divider
-    const div = this.add.graphics();
-    div.lineStyle(1, 0xC4A46C, 0.25);
-    div.lineBetween(w * 0.12, 68, w * 0.88, 68);
+    soundManager.playPaperRustle();
 
-    // Evidence cards
+    // Tab buttons container
+    this.createTabButtons(w, h);
+
+    // Containers for the two views
+    this.evidenceContainer = this.add.container(0, 0);
+    this.witnessContainer = this.add.container(0, 0);
+    this.witnessContainer.setVisible(false);
+
+    // Evidence cards & deductions in evidenceContainer
     this.renderEvidenceCards(w, h);
-
-    // Deduction section
     this.renderDeductions(w, h);
+
+    // Witness testimonies in witnessContainer
+    this.renderWitnessTestimonies(w, h);
 
     // Status text
     this.deductionStatusText = this.add.text(w / 2, h - 75, '', {
@@ -50,12 +58,13 @@ export default class EvidenceBoardScene extends Phaser.Scene {
       fontSize: '13px',
       color: '#E8D5B0',
     }).setOrigin(0.5);
+    this.evidenceContainer.add(this.deductionStatusText);
 
     // Connect button
     this.createConnectButton(w, h);
 
     // Close instruction
-    this.add.text(w / 2, h - 20, 'Press TAB or ESC to close | [ENTER] to connect selected clues', {
+    this.add.text(w / 2, h - 20, 'Press TAB or ESC to close | [1] Evidence  [2] Witnesses | [ENTER] Connect', {
       fontFamily: 'Lora, Georgia, serif',
       fontSize: '11px',
       color: '#6B5335',
@@ -65,8 +74,71 @@ export default class EvidenceBoardScene extends Phaser.Scene {
     // Keyboard bindings
     this.input.keyboard.on('keydown-TAB', () => this.closeBoard());
     this.input.keyboard.on('keydown-ESC', () => this.closeBoard());
+    this.input.keyboard.on('keydown-ONE', () => this.switchTab('evidence'));
+    this.input.keyboard.on('keydown-TWO', () => this.switchTab('witnesses'));
     this.input.keyboard.on('keydown-ENTER', () => this.performDeduction());
     this.input.keyboard.on('keydown-C', () => this.performDeduction());
+  }
+
+  createTabButtons(w, h) {
+    const tabY = 70;
+    const btnW = 200, btnH = 26;
+
+    this.tabEvBtn = this.add.graphics();
+    this.tabEvTxt = this.add.text(w / 2 - 110, tabY, '1. EVIDENCE & CLUES', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '11px', color: '#FFE8C0', letterSpacing: 1,
+    }).setOrigin(0.5);
+
+    this.tabWitBtn = this.add.graphics();
+    this.tabWitTxt = this.add.text(w / 2 + 110, tabY, '2. WITNESS STATEMENTS', {
+      fontFamily: 'Cinzel, Georgia, serif', fontSize: '11px', color: '#A0896C', letterSpacing: 1,
+    }).setOrigin(0.5);
+
+    const hitEv = this.add.rectangle(w / 2 - 110, tabY, btnW, btnH, 0x000000, 0.01).setInteractive({ useHandCursor: true });
+    const hitWit = this.add.rectangle(w / 2 + 110, tabY, btnW, btnH, 0x000000, 0.01).setInteractive({ useHandCursor: true });
+
+    hitEv.on('pointerdown', () => this.switchTab('evidence'));
+    hitWit.on('pointerdown', () => this.switchTab('witnesses'));
+
+    this.updateTabVisuals(w);
+  }
+
+  updateTabVisuals(w) {
+    const tabY = 70;
+    const btnW = 200, btnH = 26;
+    const isEv = this.activeTab === 'evidence';
+
+    this.tabEvBtn.clear();
+    this.tabEvBtn.fillStyle(isEv ? 0x5C3A1E : 0x2A1506, 0.95);
+    this.tabEvBtn.fillRoundedRect(w / 2 - 110 - btnW / 2, tabY - btnH / 2, btnW, btnH, 6);
+    this.tabEvBtn.lineStyle(1.5, isEv ? 0xC4A46C : 0x8B7355, 0.8);
+    this.tabEvBtn.strokeRoundedRect(w / 2 - 110 - btnW / 2, tabY - btnH / 2, btnW, btnH, 6);
+    this.tabEvTxt.setColor(isEv ? '#FFE8C0' : '#A0896C');
+
+    this.tabWitBtn.clear();
+    this.tabWitBtn.fillStyle(!isEv ? 0x5C3A1E : 0x2A1506, 0.95);
+    this.tabWitBtn.fillRoundedRect(w / 2 + 110 - btnW / 2, tabY - btnH / 2, btnW, btnH, 6);
+    this.tabWitBtn.lineStyle(1.5, !isEv ? 0xC4A46C : 0x8B7355, 0.8);
+    this.tabWitBtn.strokeRoundedRect(w / 2 + 110 - btnW / 2, tabY - btnH / 2, btnW, btnH, 6);
+    this.tabWitTxt.setColor(!isEv ? '#FFE8C0' : '#A0896C');
+  }
+
+  switchTab(tab) {
+    if (this.activeTab === tab) return;
+    this.activeTab = tab;
+    soundManager.playPaperRustle();
+    const w = this.cameras.main.width;
+    this.updateTabVisuals(w);
+
+    if (tab === 'evidence') {
+      this.evidenceContainer.setVisible(true);
+      this.witnessContainer.setVisible(false);
+      if (this.connectBtnContainer) this.connectBtnContainer.setVisible(true);
+    } else {
+      this.evidenceContainer.setVisible(false);
+      this.witnessContainer.setVisible(true);
+      if (this.connectBtnContainer) this.connectBtnContainer.setVisible(false);
+    }
   }
 
   renderEvidenceCards(w, h) {
@@ -135,6 +207,8 @@ export default class EvidenceBoardScene extends Phaser.Scene {
       const cardData = { e, cx, cy, cardW, cardH, bg, hitArea };
       this.cardVisuals.set(e.id, cardData);
 
+      this.evidenceContainer.add([bg, icon, name, desc, hitArea]);
+
       hitArea.on('pointerdown', () => {
         this.toggleEvidenceSelection(e.id);
       });
@@ -148,6 +222,90 @@ export default class EvidenceBoardScene extends Phaser.Scene {
         const isSelected = this.selectedForDeduction.includes(e.id);
         this.drawCardBg(bg, cx, cy, cardW, cardH, isSelected, false);
       });
+    });
+  }
+
+  renderWitnessTestimonies(w, h) {
+    const startY = 105;
+    const witnesses = [
+      {
+        name: 'Village Elder (Ақсақал)',
+        role: 'Keeper of the Youth Pact',
+        trust: this.cm.getTrust('elder'),
+        testimony: 'Entrusted by Sabit with the secret roster of 12 copyists. Hid it in an oiled packet under the well foundation stone to shield them from imperial arrest.'
+      },
+      {
+        name: 'Teacher (Мұғалім)',
+        role: 'Village Schoolmaster',
+        trust: this.cm.getTrust('teacher'),
+        testimony: 'Identified rare violet scribe ink made by Murseyit. Recalled an elder holding a package near the well at dawn. Knowledge and verse are our weapons.'
+      },
+      {
+        name: 'Archivist (Мұрағатшы)',
+        role: 'Keeper of Books & Lineages',
+        trust: this.cm.getTrust('archivist'),
+        testimony: 'Terrified of police confiscations. Moved the page from the well into his travel chest to flee to Semey and deliver it directly to the Alash committee.'
+      },
+      {
+        name: 'Raiymbek (Райымбек)',
+        role: 'Blacksmith & Batyr’s Descendant',
+        trust: 85,
+        testimony: 'A fierce blacksmith proud of his ancestors. Vows that his forged battle-saber will defend the Master’s words against any road ambush.'
+      },
+      {
+        name: 'Daulet-bai (Дәулетбай)',
+        role: 'First-Guild Trade Merchant',
+        trust: 80,
+        testimony: 'Influential merchant with trade carriages and governor permits. Believes gold and connections can bypass any imperial checkpoint without violence.'
+      },
+      {
+        name: 'Sadyk (Садық)',
+        role: 'Steppe Herdsman',
+        trust: 30,
+        testimony: 'Claims to know secret steppe passes, but eyes valuables hungrily. Beware of false guides in the hills.'
+      },
+      {
+        name: 'Mukhamet (Мұхамет)',
+        role: 'Village Scribe & Clerk',
+        trust: 35,
+        testimony: 'Speaks official Russian and praises decrees. Highly interested in the imperial bounty for unregistered texts.'
+      }
+    ];
+
+    const cardW = 440;
+    const cardH = 92;
+    const gapX = 24;
+    const gapY = 12;
+    const cols = 2;
+
+    witnesses.forEach((wit, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const cx = 55 + col * (cardW + gapX) + cardW / 2;
+      const cy = startY + row * (cardH + gapY) + cardH / 2;
+
+      const bg = this.add.graphics();
+      bg.fillStyle(0x2A1506, 0.95);
+      bg.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 8);
+      bg.lineStyle(1.5, 0x8B7355, 0.7);
+      bg.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 8);
+      this.witnessContainer.add(bg);
+
+      const title = this.add.text(cx - cardW / 2 + 14, cy - cardH / 2 + 10, wit.name, {
+        fontFamily: 'Cinzel, Georgia, serif', fontSize: '13px', color: '#FFE8C0', letterSpacing: 1,
+      });
+      this.witnessContainer.add(title);
+
+      const role = this.add.text(cx - cardW / 2 + 14, cy - cardH / 2 + 28, `${wit.role}  |  Trust: ${wit.trust}%`, {
+        fontFamily: 'Lora, Georgia, serif', fontSize: '10px', color: '#C4A46C', fontStyle: 'italic',
+      });
+      this.witnessContainer.add(role);
+
+      const body = this.add.text(cx - cardW / 2 + 14, cy - cardH / 2 + 45, wit.testimony, {
+        fontFamily: 'Lora, Georgia, serif', fontSize: '10.5px', color: '#D4C5A9',
+        wordWrap: { width: cardW - 28 }, lineSpacing: 2,
+      });
+      this.witnessContainer.add(body);
     });
   }
 
@@ -205,6 +363,7 @@ export default class EvidenceBoardScene extends Phaser.Scene {
     }
 
     this.deductionsContainer = this.add.container(0, 0);
+    this.evidenceContainer.add(this.deductionsContainer);
     const deductions = this.cm.getDeductions();
     if (deductions.length === 0) return;
 
@@ -291,6 +450,7 @@ export default class EvidenceBoardScene extends Phaser.Scene {
 
     if (result.success) {
       if (result.new) {
+        soundManager.playDeductionSuccess();
         this.deductionStatusText.setText('◆ NEW DEDUCTION: ' + result.result);
         this.deductionStatusText.setColor('#70C050');
       } else {

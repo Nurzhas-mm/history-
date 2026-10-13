@@ -28,6 +28,8 @@ export default class ChapterManager {
     // Day/night
     this.isEvening = false;
     this.finalChoice = null;
+    this.companion = null;
+    this.checkpointPassed = false;
 
     this.initChapters();
     this.initEvidence();
@@ -244,9 +246,49 @@ export default class ChapterManager {
   }
 
   getRank() {
-    if (this.heritagePoints >= 85) return 'HERITAGE KEEPER';
+    if (this.heritagePoints >= 80) return 'HERITAGE KEEPER';
     if (this.heritagePoints >= 50) return 'ARCHIVE SCHOLAR';
     return 'CURIOUS RESEARCHER';
+  }
+
+  // Companion system for Chapter 6
+  setCompanion(companionId) {
+    this.companion = companionId;
+    this.saveState();
+  }
+
+  getCompanion() {
+    return this.companion;
+  }
+
+  clearCompanion() {
+    this.companion = null;
+    this.saveState();
+  }
+
+  passCheckpoint() {
+    this.checkpointPassed = true;
+    this.saveState();
+  }
+
+  isCheckpointPassed() {
+    return this.checkpointPassed;
+  }
+
+  markCluePresented(npcKey, clueId) {
+    if (!this.presentedClues) this.presentedClues = {};
+    const key = `${npcKey}_${clueId}`;
+    if (!this.presentedClues[key]) {
+      this.presentedClues[key] = true;
+      this.saveState();
+      return true;
+    }
+    return false;
+  }
+
+  isCluePresented(npcKey, clueId) {
+    if (!this.presentedClues) return false;
+    return !!this.presentedClues[`${npcKey}_${clueId}`];
   }
 
   // Save/load
@@ -263,7 +305,10 @@ export default class ChapterManager {
       puzzleSolved: this.puzzleSolved,
       trust: this.trust,
       isEvening: this.isEvening,
-      finalChoice: this.finalChoice
+      finalChoice: this.finalChoice,
+      companion: this.companion,
+      checkpointPassed: this.checkpointPassed,
+      presentedClues: this.presentedClues || {}
     };
     Object.keys(this.evidence).forEach(k => {
       data.evidence[k] = this.evidence[k].found;
@@ -276,11 +321,36 @@ export default class ChapterManager {
     }
   }
 
+  reset() {
+    this.activeChapterId = 'ch1';
+    this.completedChapters = [];
+    this.heritagePoints = 0;
+    this.chapterProgress = {};
+    this.interviewedNPCs = [];
+    this.collectedFragments = [];
+    this.evidence = {};
+    this.deductions = [];
+    this.puzzleSolved = false;
+    this.trust = { elder: 65, teacher: 50, archivist: 45 };
+    this.isEvening = false;
+    this.finalChoice = null;
+    this.companion = null;
+    this.checkpointPassed = false;
+    this.presentedClues = {};
+    this.initChapters();
+    this.initEvidence();
+    this.clearSave();
+  }
+
   loadState() {
     try {
       const raw = localStorage.getItem('archives_of_alash_save');
       if (!raw) return false;
       const data = JSON.parse(raw);
+      if (data.completedChapters && data.completedChapters.includes('ch6')) {
+        this.clearSave();
+        return false;
+      }
       this.activeChapterId = data.activeChapterId || 'ch1';
       this.completedChapters = data.completedChapters || [];
       this.heritagePoints = data.heritagePoints || 0;
@@ -295,6 +365,14 @@ export default class ChapterManager {
       this.trust = data.trust || { elder: 65, teacher: 50, archivist: 45 };
       this.isEvening = data.isEvening || false;
       this.finalChoice = data.finalChoice || null;
+      if (this.activeChapterId === 'ch6') {
+        this.companion = data.companion || null;
+        this.checkpointPassed = data.checkpointPassed || false;
+      } else {
+        this.companion = null;
+        this.checkpointPassed = false;
+      }
+      this.presentedClues = data.presentedClues || {};
       if (data.evidence) {
         Object.keys(data.evidence).forEach(k => {
           if (this.evidence[k]) {
