@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import soundManager from '../systems/SoundManager.js';
 
 export default class MenuScene extends Phaser.Scene {
   constructor() {
@@ -6,6 +7,7 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   create() {
+    soundManager.stopWindAmbient();
     this.cameras.main.fadeIn(600, 0, 0, 0);
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
@@ -17,7 +19,7 @@ export default class MenuScene extends Phaser.Scene {
     this.createTitle(w, h);
     this.createOrnamentalDividers(w, h);
 
-    this.time.delayedCall(1800, () => {
+    this.time.delayedCall(600, () => {
       this.createMenuButtons(w, h);
       this.addVersionText(w, h);
     });
@@ -131,8 +133,8 @@ export default class MenuScene extends Phaser.Scene {
   createTitle(w, h) {
     const titleY = h * 0.2;
 
-    // Title "ARCHIVES"
-    const archivesText = this.add.text(w / 2, titleY, 'ARCHIVES', {
+    // Title "HISTORY"
+    const archivesText = this.add.text(w / 2, titleY, 'HISTORY', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '62px',
       color: '#C4A46C',
@@ -141,14 +143,14 @@ export default class MenuScene extends Phaser.Scene {
       letterSpacing: 14,
     }).setOrigin(0.5).setAlpha(0).setScale(0.85);
 
-    // Title "OF ALASH"
-    const ofAlashText = this.add.text(w / 2, titleY + 68, 'OF ALASH', {
+    // Title "OF KAZAKHSTAN"
+    const ofAlashText = this.add.text(w / 2, titleY + 68, 'OF KAZAKHSTAN', {
       fontFamily: 'Cinzel, Georgia, serif',
-      fontSize: '52px',
+      fontSize: '48px',
       color: '#E8D5B0',
       stroke: '#2A1506',
       strokeThickness: 2,
-      letterSpacing: 12,
+      letterSpacing: 10,
     }).setOrigin(0.5).setAlpha(0).setScale(0.85);
 
     // Subtitle
@@ -228,55 +230,20 @@ export default class MenuScene extends Phaser.Scene {
   }
 
   createMenuButtons(w, h) {
-    let hasSave = false;
-    try {
-      const raw = localStorage.getItem('archives_of_alash_save');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        hasSave = !!parsed.activeChapterId && !(parsed.completedChapters && parsed.completedChapters.includes('ch6'));
-      }
-    } catch (e) {
-      hasSave = false;
-    }
     const btnW = 260;
     const btnH = 50;
+    const btnY1 = h * 0.62;
+    const btnY2 = h * 0.72;
 
-    let groups = [];
+    const playBtn = this.createParchmentButton(w / 2, btnY1, btnW, btnH, 'PLAY', () => {
+      this.transitionTo('CampaignScene');
+    });
 
-    if (hasSave) {
-      const btnY1 = h * 0.58;
-      const btnY2 = h * 0.67;
-      const btnY3 = h * 0.76;
+    const howBtn = this.createParchmentButton(w / 2, btnY2, btnW, btnH, 'HOW TO PLAY', () => {
+      this.showHowToPlay(w, h);
+    });
 
-      const continueBtn = this.createParchmentButton(w / 2, btnY1, btnW, btnH, 'CONTINUE', () => {
-        this.transitionTo('GameScene');
-      });
-
-      const newGameBtn = this.createParchmentButton(w / 2, btnY2, btnW, btnH, 'NEW GAME', () => {
-        try { localStorage.removeItem('archives_of_alash_save'); } catch (e) {}
-        this.transitionTo('IntroScene');
-      });
-
-      const howBtn = this.createParchmentButton(w / 2, btnY3, btnW, btnH, 'HOW TO PLAY', () => {
-        this.showHowToPlay(w, h);
-      });
-
-      groups = [continueBtn, newGameBtn, howBtn];
-    } else {
-      const btnY1 = h * 0.62;
-      const btnY2 = h * 0.72;
-
-      const startBtn = this.createParchmentButton(w / 2, btnY1, btnW, btnH, 'START GAME', () => {
-        try { localStorage.removeItem('archives_of_alash_save'); } catch (e) {}
-        this.transitionTo('IntroScene');
-      });
-
-      const howBtn = this.createParchmentButton(w / 2, btnY2, btnW, btnH, 'HOW TO PLAY', () => {
-        this.showHowToPlay(w, h);
-      });
-
-      groups = [startBtn, howBtn];
-    }
+    const groups = [playBtn, howBtn];
 
     groups.forEach((group, idx) => {
       group.visuals.forEach(item => item.setAlpha(0));

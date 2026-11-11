@@ -19,10 +19,21 @@ export default class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-    // Audio initialization
+    // Audio initialization — wind plays only while inside the event
     soundManager.init();
-    this.input.once('pointerdown', () => soundManager.startWindAmbient());
-    this.input.keyboard.once('keydown', () => soundManager.startWindAmbient());
+    soundManager.startWindAmbient();
+    const startWindIfActive = () => {
+      if (this.scene && this.scene.isActive('GameScene')) {
+        soundManager.startWindAmbient();
+      }
+    };
+    this.input.once('pointerdown', startWindIfActive);
+    this.input.keyboard.once('keydown', startWindIfActive);
+    this.events.once('shutdown', () => {
+      this.input.off('pointerdown', startWindIfActive);
+      this.input.keyboard.off('keydown', startWindIfActive);
+      soundManager.stopWindAmbient();
+    });
 
     this.dialogueActive = false;
     this.dialogueQueue = [];
@@ -79,6 +90,7 @@ export default class GameScene extends Phaser.Scene {
         this.followerShadow.destroy();
         this.followerShadow = null;
       }
+      this.syncCompanionNpcVisibility();
     }
 
     if (this.chapterManager.isEvening) {
@@ -144,37 +156,37 @@ export default class GameScene extends Phaser.Scene {
     }
     this.checkInteractions();
 
-    // Village eastern boundary check: x >= 1580
-    if (this.player.x >= 1580) {
+    // Village eastern boundary check: x >= 2480
+    if (this.player.x >= 2480) {
       const cm = this.chapterManager;
       if (!cm.isChapterActive('ch6') && !cm.isChapterCompleted('ch6')) {
-        this.player.x = 1560;
-        this.showFloatingNotice('⚠ Дорога на восток ведет в город Семей. Завершите дела в ауле.');
+        this.player.x = 2455;
+        this.showFloatingNotice('⚠ The eastern road leads to Semey. Finish your investigation in the village first.');
       } else if (cm.isChapterActive('ch6') && !cm.companion) {
-        this.player.x = 1560;
-        this.showFloatingNotice('⚠ Степная дорога опасна! Наймите напарника среди жителей аула.');
+        this.player.x = 2455;
+        this.showFloatingNotice('⚠ The Steppe Road is dangerous! Recruit a companion in the village before departing.');
       }
     }
 
-    // Steppe Road ambush check: x >= 1780
+    // Steppe Road ambush check: x >= 2760
     if (this.chapterManager.isChapterActive('ch6') && this.chapterManager.companion && !this.ambushTriggered && !this.ambushResolved) {
-      if (this.player.x >= 1780 && this.player.x <= 1920) {
+      if (this.player.x >= 2760 && this.player.x <= 2920) {
         this.ambushTriggered = true;
         this.triggerRoadAmbush();
       }
     }
 
-    // Frontier Post sentry check: x >= 2010
+    // Frontier Post sentry check: x >= 3130
     if (this.chapterManager.isChapterActive('ch6') && this.ambushResolved && !this.chapterManager.isCheckpointPassed()) {
-      if (this.player.x >= 2010 && this.player.x <= 2070 && !this.checkpointTriggered) {
+      if (this.player.x >= 3130 && this.player.x <= 3220 && !this.checkpointTriggered) {
         this.checkpointTriggered = true;
         this.triggerCheckpointEncounter();
       }
     }
 
-    // Semey Alash Headquarters arrival check: x >= 2440
+    // Semey Alash Headquarters arrival check: x >= 3790
     if (this.chapterManager.isChapterActive('ch6') && this.chapterManager.isCheckpointPassed() && !this.alashArrivalTriggered) {
-      if (this.player.x >= 2440) {
+      if (this.player.x >= 3790) {
         this.alashArrivalTriggered = true;
         this.triggerAlashArrival();
       }
@@ -221,6 +233,23 @@ export default class GameScene extends Phaser.Scene {
     this.followerCompanion = this.add.image(this.player.x - 32, this.player.y, texture).setDepth(9);
     this.followerShadow = this.add.image(this.player.x - 32, this.player.y + 16, 'shadow')
       .setDepth(8).setAlpha(0.25).setScale(0.85);
+    this.syncCompanionNpcVisibility();
+  }
+
+  syncCompanionNpcVisibility() {
+    const activeCompanionId = (this.chapterManager && this.chapterManager.isChapterActive('ch6'))
+      ? this.chapterManager.companion
+      : null;
+    if (!this.npcs) return;
+    this.npcs.forEach(npc => {
+      if (['sadyk', 'mukhamet', 'raiymbek', 'dauletbai'].includes(npc.npcId)) {
+        if (typeof npc.setNpcVisible === 'function') {
+          npc.setNpcVisible(npc.npcId !== activeCompanionId);
+        } else {
+          npc.setVisible(npc.npcId !== activeCompanionId);
+        }
+      }
+    });
   }
 
   // ==================== MAP ====================
@@ -231,7 +260,7 @@ export default class GameScene extends Phaser.Scene {
     g.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
     // Steppe grass specks
-    for (let i = 0; i < 450; i++) {
+    for (let i = 0; i < 950; i++) {
       const gx = Phaser.Math.Between(0, MAP_WIDTH);
       const gy = Phaser.Math.Between(0, MAP_HEIGHT);
       const shade = Phaser.Math.Between(0, 2);
@@ -241,7 +270,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Grass blades
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 420; i++) {
       const gx = Phaser.Math.Between(0, MAP_WIDTH);
       const gy = Phaser.Math.Between(0, MAP_HEIGHT);
       g.lineStyle(1, 0x4E7030, 0.3);
@@ -249,98 +278,119 @@ export default class GameScene extends Phaser.Scene {
       g.lineBetween(gx, gy, gx - 2, gy - 3);
     }
 
-    // Village roads & central square (x: 250..1450)
-    g.fillStyle(0x8B7355, 0.5);
-    g.fillRect(300, 250, 1000, 450);
-    g.fillRect(400, 700, 700, 150);
+    // ==================== SPACIOUS VILLAGE ROADS & CENTRAL SQUARE (x: 240..2450) ====================
+    g.fillStyle(0x8B7355, 0.48);
+    // Main horizontal avenues across the village
+    g.fillRect(300, 340, 1840, 95);   // Northern avenue (Elder -> House 1 -> Daulet-bai Manor -> Archive)
+    g.fillRect(300, 810, 2150, 110);  // Central thoroughfare (West Village -> Central Square -> Steppe Road)
+    g.fillRect(300, 1280, 1840, 95);  // Southern avenue (Teacher -> Sadyk -> Mukhamet -> Raiymbek Forge)
+
+    // Vertical connecting lanes across the village
+    g.fillRect(310, 340, 85, 1035);   // West lane (Elder <-> House 3 <-> Teacher)
+    g.fillRect(760, 275, 85, 1080);   // West-Central lane (House 1 <-> House 6 <-> Sadyk)
+    g.fillRect(1450, 335, 90, 1030);  // East-Central lane (Daulet-bai Manor <-> Central Square <-> Mukhamet)
+    g.fillRect(2015, 375, 90, 980);   // East Village lane (Archive <-> House 5 <-> Raiymbek Forge)
+
+    // Southernmost spurs to Houses 4 & 2
+    g.fillRect(1135, 1340, 80, 130);
+    g.fillRect(1775, 1340, 80, 110);
+
+    // Lighter inner road surface
     g.fillStyle(0x9B8B75, 0.35);
-    g.fillRect(320, 270, 960, 410);
-    g.fillRect(420, 720, 660, 110);
-    g.fillStyle(0xA09070, 0.4);
-    g.fillCircle(800, 600, 180);
-    g.lineStyle(1, 0x6B5335, 0.3);
-    g.strokeRect(300, 250, 1000, 450);
-    g.strokeRect(400, 700, 700, 150);
-    g.strokeCircle(800, 600, 180);
+    g.fillRect(315, 355, 1810, 65);
+    g.fillRect(315, 825, 2135, 80);
+    g.fillRect(315, 1295, 1810, 65);
+    g.fillRect(325, 355, 55, 1005);
+    g.fillRect(775, 290, 55, 1050);
+    g.fillRect(1465, 350, 60, 1000);
+    g.fillRect(2030, 390, 60, 950);
 
-    // Branching paths to candidate houses in the village
-    g.fillStyle(0x8B7355, 0.35);
-    g.fillRect(480, 760, 90, 80);   // to Sadyk
-    g.fillRect(910, 840, 110, 80);  // to Mukhamet
-    g.fillRect(1180, 740, 120, 80); // to Raiymbek forge
-    g.fillRect(1380, 480, 120, 80); // to Daulet-bai manor
+    // Central Village Square & Communal Well Plaza
+    g.fillStyle(0xA09070, 0.45);
+    g.fillCircle(1150, 865, 250);
+    g.fillStyle(0xB5A486, 0.3);
+    g.fillCircle(1150, 865, 175);
+    g.lineStyle(1.5, 0x6B5335, 0.35);
+    g.strokeCircle(1150, 865, 250);
+    g.strokeCircle(1150, 865, 175);
 
-    // ==================== THE GREAT STEPPE ROAD & CANYON (x: 1450..2040) ====================
+    // Courtyard forecourts for key buildings
+    g.fillStyle(0x8B7355, 0.4);
+    g.fillRect(1400, 325, 190, 65);  // Daulet-bai's Manor courtyard (north-central)
+    g.fillRect(2000, 365, 190, 65);  // Archive courtyard (north-east)
+    g.fillRect(1965, 1235, 165, 65); // Raiymbek's Forge courtyard (south-east)
+
+    // ==================== THE GREAT STEPPE ROAD & CANYON (x: 2450..3140) ====================
     // Canyon rocky ridges north and south
-    g.fillStyle(0x4A382A, 0.7);
-    g.fillRect(1560, 100, 460, 310);
-    g.fillRect(1580, 720, 450, 380);
+    g.fillStyle(0x4A382A, 0.72);
+    g.fillRect(2500, 140, 610, 580);
+    g.fillRect(2500, 1000, 610, 620);
     g.fillStyle(0x382A1E, 0.85);
-    g.fillRect(1600, 120, 400, 260);
-    g.fillRect(1620, 760, 390, 310);
+    g.fillRect(2540, 180, 530, 490);
+    g.fillRect(2540, 1050, 530, 520);
 
     // Rocky gorge contours
     g.lineStyle(2, 0x5C4634, 0.6);
-    g.strokeRect(1560, 100, 460, 310);
-    g.strokeRect(1580, 720, 450, 380);
+    g.strokeRect(2500, 140, 610, 580);
+    g.strokeRect(2500, 1000, 610, 620);
 
     // Steppe canyon road surface
     g.fillStyle(0x7D6548, 0.85);
-    g.fillRect(1450, 490, 580, 120);
+    g.fillRect(2450, 795, 690, 130);
     g.fillStyle(0x947D5E, 0.5);
-    g.fillRect(1460, 505, 560, 90);
+    g.fillRect(2460, 810, 670, 100);
     g.lineStyle(1.5, 0x664E35, 0.5);
-    g.strokeRect(1450, 490, 580, 120);
+    g.strokeRect(2450, 795, 690, 130);
 
     // Road ruts and wagon tracks
     g.lineStyle(1, 0x553E27, 0.35);
-    g.lineBetween(1460, 530, 2030, 530);
-    g.lineBetween(1460, 570, 2030, 570);
+    g.lineBetween(2460, 838, 3135, 838);
+    g.lineBetween(2460, 882, 3135, 882);
 
     // Steppe canyon rocks
-    for (let r = 0; r < 20; r++) {
-      const rx = Phaser.Math.Between(1580, 2000);
-      const ry = Phaser.Math.Between(420, 480);
+    for (let r = 0; r < 28; r++) {
+      const rx = Phaser.Math.Between(2520, 3090);
+      const ry = Phaser.Math.Between(730, 785);
       g.fillStyle(0x5A4A38, 0.7);
-      g.fillCircle(rx, ry, Phaser.Math.Between(4, 9));
-      const rx2 = Phaser.Math.Between(1580, 2000);
-      const ry2 = Phaser.Math.Between(620, 680);
-      g.fillCircle(rx2, ry2, Phaser.Math.Between(4, 9));
+      g.fillCircle(rx, ry, Phaser.Math.Between(4, 10));
+      const rx2 = Phaser.Math.Between(2520, 3090);
+      const ry2 = Phaser.Math.Between(935, 990);
+      g.fillCircle(rx2, ry2, Phaser.Math.Between(4, 10));
     }
 
-    // ==================== FRONTIER CHECKPOINT OUTPOST (x: 2000..2080) ====================
+    // ==================== FRONTIER CHECKPOINT OUTPOST (x: 3130..3230) ====================
     g.fillStyle(0x66533D, 0.95);
-    g.fillRect(2010, 460, 80, 180);
+    g.fillRect(3135, 750, 95, 220);
     g.lineStyle(2, 0x423220, 0.8);
-    g.strokeRect(2010, 460, 80, 180);
+    g.strokeRect(3135, 750, 95, 220);
 
-    // ==================== SEMEY CITY QUARTER (x: 2080..2650) ====================
+    // ==================== SEMEY CITY QUARTER (x: 3230..4200) ====================
     // Paved stone district
     g.fillStyle(0x504A44);
-    g.fillRect(2080, 150, 570, 950);
+    g.fillRect(3230, 180, 940, 1420);
 
     // Cobblestone pavement grid
     g.lineStyle(1, 0x3E3832, 0.45);
-    for (let cx = 2080; cx < 2640; cx += 26) {
-      g.lineBetween(cx, 160, cx, 1090);
+    for (let cx = 3230; cx < 4160; cx += 28) {
+      g.lineBetween(cx, 190, cx, 1590);
     }
-    for (let cy = 160; cy < 1090; cy += 16) {
-      g.lineBetween(2080, cy, 2640, cy);
+    for (let cy = 190; cy < 1590; cy += 18) {
+      g.lineBetween(3230, cy, 4160, cy);
     }
 
     // Main city avenue
     g.fillStyle(0x5D554D);
-    g.fillRect(2080, 460, 570, 160);
+    g.fillRect(3230, 780, 930, 160);
     g.lineStyle(2, 0x7B7166, 0.8);
-    g.lineBetween(2080, 460, 2640, 460);
-    g.lineBetween(2080, 620, 2640, 620);
+    g.lineBetween(3230, 780, 4160, 780);
+    g.lineBetween(3230, 940, 4160, 940);
 
     // City plaza in front of Alash Headquarters
     g.lineStyle(2, 0x8C8174, 0.5);
-    g.strokeCircle(2510, 450, 65);
-    g.strokeCircle(2510, 450, 95);
+    g.strokeCircle(3875, 790, 75);
+    g.strokeCircle(3875, 790, 110);
     g.fillStyle(0x655D54, 0.6);
-    g.fillCircle(2510, 450, 40);
+    g.fillCircle(3875, 790, 48);
   }
 
   createShadowLayer() {
@@ -515,7 +565,7 @@ export default class GameScene extends Phaser.Scene {
         flagG.fillCircle(d.x + 25, d.y - 49, 6);
         flagG.fillStyle(0xFFD700);
         flagG.fillCircle(d.x + 36, d.y - 49, 3);
-        this.add.text(d.x + 32, d.y - 40, 'АЛАШ', {
+        this.add.text(d.x + 32, d.y - 40, 'ALASH', {
           fontFamily: 'Cinzel, Georgia, serif', fontSize: '9px', color: '#FFE8C0', fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(6);
       }
@@ -639,7 +689,7 @@ export default class GameScene extends Phaser.Scene {
     g.fillCircle(doorX + doorW / 2 - 4, doorY + 18, 2);
     g.fillCircle(doorX + doorW / 2 + 4, doorY + 18, 2);
 
-    // Signboard: ШТАБ-КВАРТИРА ПАРТИИ «АЛАШ»
+    // Signboard: ALASH PARTY HEADQUARTERS
     const signW = 140, signH = 18;
     const signX = b.x + b.w / 2 - signW / 2;
     const signY = b.y + 56;
@@ -648,7 +698,7 @@ export default class GameScene extends Phaser.Scene {
     g.lineStyle(1, 0xC4A46C, 0.9);
     g.strokeRoundedRect(signX, signY, signW, signH, 4);
 
-    this.add.text(b.x + b.w / 2, signY + 9, 'ШТАБ-КВАРТИРА ПАРТИИ «АЛАШ»', {
+    this.add.text(b.x + b.w / 2, signY + 9, 'ALASH PARTY HEADQUARTERS', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '7.5px', color: '#FFE8C0', fontStyle: 'bold', letterSpacing: 1
     }).setOrigin(0.5).setDepth(4);
   }
@@ -1010,6 +1060,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Check NPCs
     for (const npc of this.npcs) {
+      if (!npc.visible) continue;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, npc.x, npc.y);
       if (dist < closestDist) { closestDist = dist; closest = { type: 'npc', target: npc }; }
     }
@@ -1201,11 +1252,11 @@ export default class GameScene extends Phaser.Scene {
           });
         } else if (cm.companion === key) {
           this.startDialogueData([
-            { speaker: this.getNpcDisplayName(key), text: 'Я готов ехать с вами! Держим путь на восток через ущелье к городу Семей.' }
+            { speaker: this.getNpcDisplayName(key), text: 'I am ready to ride with you! Let us head east through the ravine toward Semey.' }
           ]);
         } else {
           this.startDialogueData([
-            { speaker: this.getNpcDisplayName(key), text: 'Вы уже выбрали другого попутчика. Счастливого пути в Семей!' }
+            { speaker: this.getNpcDisplayName(key), text: 'You have already chosen another companion. Safe travels to Semey!' }
           ]);
         }
         return;
@@ -1237,7 +1288,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.choiceContainer = this.add.container(0, 0).setDepth(100).setScrollFactor(0);
 
-    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.55).setInteractive();
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.55).setScrollFactor(0).setInteractive();
     this.choiceContainer.add(overlay);
 
     const panelW = 580, panelH = 290, px = w / 2, py = h / 2;
@@ -1278,7 +1329,7 @@ export default class GameScene extends Phaser.Scene {
       }).setOrigin(0.5);
       this.choiceContainer.add(btnText);
 
-      const hitArea = this.add.rectangle(px, by, bw, bh, 0x000000, 0.01).setInteractive({ useHandCursor: true });
+      const hitArea = this.add.rectangle(px, by, bw, bh, 0x000000, 0.01).setScrollFactor(0).setInteractive({ useHandCursor: true });
       this.choiceContainer.add(hitArea);
 
       hitArea.on('pointerover', () => {
@@ -1481,10 +1532,12 @@ export default class GameScene extends Phaser.Scene {
       });
     }
 
-    // Lantern light effect near archive and well
+    // Lantern light effect near archive, well, manor, and elder's house
     const lanternPositions = [
-      { x: 1280, y: 220 },
-      { x: 750, y: 680 },
+      { x: 2050, y: 390 },
+      { x: 1150, y: 920 },
+      { x: 1495, y: 350 },
+      { x: 350, y: 365 },
     ];
 
     lanternPositions.forEach(pos => {
@@ -1554,9 +1607,9 @@ export default class GameScene extends Phaser.Scene {
     this.dialogueContainer.add(this.dialogueContentText);
 
     // Present evidence button [X]
-    const presentBtn = this.add.text(bx + 20, by + boxH - 24, '[X] ПОКАЗАТЬ УЛИКУ', {
+    const presentBtn = this.add.text(bx + 20, by + boxH - 24, '[X] PRESENT EVIDENCE', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '11px', color: '#D4C5A9', letterSpacing: 1
-    }).setInteractive({ useHandCursor: true });
+    }).setScrollFactor(0).setInteractive({ useHandCursor: true });
     presentBtn.on('pointerover', () => presentBtn.setColor('#FFD700'));
     presentBtn.on('pointerout', () => presentBtn.setColor('#D4C5A9'));
     presentBtn.on('pointerdown', (e) => {
@@ -1570,11 +1623,13 @@ export default class GameScene extends Phaser.Scene {
 
     // Click area across entire dialogue box
     const clickArea = this.add.rectangle(bx + boxW / 2, by + boxH / 2, boxW, boxH, 0x000000, 0.001)
+      .setScrollFactor(0)
       .setInteractive({ useHandCursor: true });
     clickArea.on('pointerdown', () => {
       if (this.dialogueActive && !this.showingChoices && !this.showingEvidenceMenu) this.advanceDialogue();
     });
     this.dialogueContainer.add(clickArea);
+    this.dialogueContainer.setScrollFactor(0, 0, true);
   }
 
   showCurrentDialogue() {
@@ -1675,7 +1730,7 @@ export default class GameScene extends Phaser.Scene {
     };
 
     const container = this.add.container(0, 0).setDepth(100).setScrollFactor(0);
-    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.6).setInteractive();
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.6).setScrollFactor(0).setInteractive();
     container.add(overlay);
 
     const panelW = 560, panelH = 260, px = w / 2, py = h / 2;
@@ -1686,7 +1741,7 @@ export default class GameScene extends Phaser.Scene {
     panel.strokeRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
     container.add(panel);
 
-    const title = this.add.text(px, py - panelH / 2 + 25, '◆  ВЫБОР НАПАРНИКА В ДОРОГУ  ◆', {
+    const title = this.add.text(px, py - panelH / 2 + 25, '◆  CHOOSE YOUR JOURNEY COMPANION  ◆', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '15px', color: '#C4A46C', letterSpacing: 2
     }).setOrigin(0.5);
     container.add(title);
@@ -1714,12 +1769,13 @@ export default class GameScene extends Phaser.Scene {
     btnABg.strokeRoundedRect(px - btnW - 10, btnY - btnH / 2, btnW, btnH, 8);
     container.add(btnABg);
 
-    const btnATxt = this.add.text(px - btnW / 2 - 10, btnY, '[A] ВЗЯТЬ В НАПАРНИКИ', {
+    const btnATxt = this.add.text(px - btnW / 2 - 10, btnY, '[A] RECRUIT COMPANION', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '12px', color: '#FFE8C0', letterSpacing: 1
     }).setOrigin(0.5);
     container.add(btnATxt);
 
     const hitA = this.add.rectangle(px - btnW / 2 - 10, btnY, btnW, btnH, 0x000000, 0.01)
+      .setScrollFactor(0)
       .setInteractive({ useHandCursor: true });
     container.add(hitA);
 
@@ -1731,14 +1787,16 @@ export default class GameScene extends Phaser.Scene {
     btnBBg.strokeRoundedRect(px + 10, btnY - btnH / 2, btnW, btnH, 8);
     container.add(btnBBg);
 
-    const btnBTxt = this.add.text(px + btnW / 2 + 10, btnY, '[B] ПОДУМАТЬ ЕЩЕ', {
+    const btnBTxt = this.add.text(px + btnW / 2 + 10, btnY, '[B] CONSIDER OTHERS', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '12px', color: '#D4C5A9', letterSpacing: 1
     }).setOrigin(0.5);
     container.add(btnBTxt);
 
     const hitB = this.add.rectangle(px + btnW / 2 + 10, btnY, btnW, btnH, 0x000000, 0.01)
+      .setScrollFactor(0)
       .setInteractive({ useHandCursor: true });
     container.add(hitB);
+    container.setScrollFactor(0, 0, true);
 
     const cleanup = () => {
       this.showingChoices = false;
@@ -1754,8 +1812,8 @@ export default class GameScene extends Phaser.Scene {
       soundManager.playClueChime();
       this.startDialogue(candidateKey, 'accepted', () => {
         this.showQuestCompleteEffect(
-          'НАПАРНИК ВЫБРАН!',
-          `Вы отправляетесь в путь вместе с ${candidateData.name}!\nДержите путь на восток по Степной дороге в Семей.`,
+          'COMPANION RECRUITED!',
+          `You set out on the journey with ${candidateData.name}!\nHead east along the Steppe Road toward Semey.`,
           '+10 Heritage Points'
         );
         this.chapterManager.addPoints(10);
@@ -1781,17 +1839,17 @@ export default class GameScene extends Phaser.Scene {
     if (companion === 'sadyk') {
       this.startDialogue('antagonist_road', 'sadyk_betrayal', () => {
         this.showDefeatModal(
-          'ТРАГИЧЕСКИЙ ФИНАЛ: ПРЕДАТЕЛЬСТВО',
-          'Садық оказался сообщником степных разбойников!',
-          'Садық заранее сговорился с засадой ради кошеля золота. В узком ущелье исследователь пал, а драгоценная страница со списком 12 переписчиков была захвачена...'
+          'TRAGIC OUTCOME: BETRAYAL',
+          'Sadyk turned out to be an accomplice of the steppe bandits!',
+          'Sadyk had secretly conspired with the ambushers for a pouch of gold. In the narrow ravine you were overwhelmed, and the precious page bearing the names of the 12 copyists was seized...'
         );
       });
     } else if (companion === 'mukhamet') {
       this.startDialogue('antagonist_road', 'mukhamet_theft', () => {
         this.showDefeatModal(
-          'ТРАГИЧЕСКИЙ ФИНАЛ: КОРЫСТНЫЙ ПИСАРЬ',
-          'Мұхамет украл список ради царского чина и награды!',
-          'Мұхамет выстрелил в вашего коня, выхватил сумку с рукописями и сдал имена 12 переписчиков царским властям. Вскоре аул окружили каратели, и переписчики были казнены...'
+          'TRAGIC OUTCOME: GREEDY SCRIBE',
+          'Mukhamet stole the roster for an imperial rank and bounty!',
+          'Mukhamet shot your horse, snatched the satchel of manuscripts, and handed the names of the 12 copyists to the tsarist authorities. Soon punitive detachments surrounded the village...'
         );
       });
     } else if (companion === 'raiymbek') {
@@ -1811,15 +1869,19 @@ export default class GameScene extends Phaser.Scene {
             duration: 900,
             ease: 'Cubic.easeIn',
             onComplete: () => {
-              antagonistNpc.setVisible(false);
+              if (typeof antagonistNpc.setNpcVisible === 'function') {
+                antagonistNpc.setNpcVisible(false);
+              } else {
+                antagonistNpc.setVisible(false);
+              }
             }
           });
         }
         this.ambushResolved = true;
         this.chapterManager.addPoints(10);
         this.showQuestCompleteEffect(
-          'БАТЫР РАЙЫМБЕК СОКРУШИЛ ЗАСАДУ!',
-          'Клинком предков Райымбек разогнал разбойников в ущелье!\nДорога к пограничному посту свободна.',
+          'BATYR RAIYMBEK SHATTERED THE AMBUSH!',
+          'Wielding his ancestral blade, Raiymbek routed the bandits in the ravine!\nThe road to the frontier post is clear.',
           '+10 Heritage Points'
         );
         this.updateAllUI();
@@ -1840,15 +1902,19 @@ export default class GameScene extends Phaser.Scene {
             duration: 1000,
             ease: 'Cubic.easeIn',
             onComplete: () => {
-              antagonistNpc.setVisible(false);
+              if (typeof antagonistNpc.setNpcVisible === 'function') {
+                antagonistNpc.setNpcVisible(false);
+              } else {
+                antagonistNpc.setVisible(false);
+              }
             }
           });
         }
         this.ambushResolved = true;
         this.chapterManager.addPoints(10);
         this.showQuestCompleteEffect(
-          'ДӘУЛЕТБАЙ ПОДКУПИЛ ЗАСАДУ!',
-          'Царские червонцы решили дело без единой капли крови!\nДорога к пограничному посту открыта.',
+          'DAULET-BAI BRIBED THE AMBUSHERS!',
+          'Gold coins settled the matter without shedding a single drop of blood!\nThe road to the frontier post is open.',
           '+10 Heritage Points'
         );
         this.updateAllUI();
@@ -1857,15 +1923,19 @@ export default class GameScene extends Phaser.Scene {
   }
 
   showDefeatModal(title, subtitle, description) {
+    this.showingChoices = true;
+    if (this.player) this.player.setVelocity(0, 0);
     soundManager.playEncounterTension();
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
     const container = this.add.container(0, 0).setDepth(150).setScrollFactor(0);
 
-    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x1a0505, 0.88).setInteractive();
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x1a0505, 0.88)
+      .setScrollFactor(0)
+      .setInteractive();
     container.add(overlay);
 
-    const panelW = 580, panelH = 310;
+    const panelW = 580, panelH = 330;
     const px = w / 2, py = h / 2;
 
     const bg = this.add.graphics();
@@ -1890,14 +1960,19 @@ export default class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     container.add(subTxt);
 
-    const descTxt = this.add.text(px, py - 6, description, {
+    const descTxt = this.add.text(px, py - 12, description, {
       fontFamily: 'Lora, Georgia, serif', fontSize: '13px', color: '#E8D5B0', align: 'center',
       wordWrap: { width: panelW - 60 }, lineSpacing: 4
     }).setOrigin(0.5);
     container.add(descTxt);
 
-    // Retry button
-    const btnW = 240, btnH = 46;
+    const noteTxt = this.add.text(px, py + 56, 'The manuscript is lost. Your investigation must begin anew.', {
+      fontFamily: 'Lora, Georgia, serif', fontSize: '12px', color: '#D4A0A0', fontStyle: 'italic'
+    }).setOrigin(0.5);
+    container.add(noteTxt);
+
+    // TRY AGAIN button
+    const btnW = 260, btnH = 46;
     const btnY = py + panelH / 2 - 42;
 
     const btnBg = this.add.graphics();
@@ -1911,14 +1986,33 @@ export default class GameScene extends Phaser.Scene {
     drawBtn(false);
     container.add(btnBg);
 
-    const btnTxt = this.add.text(px, btnY, 'Try again', {
+    const btnTxt = this.add.text(px, btnY, 'TRY AGAIN', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '15px', color: '#FFE8C0', letterSpacing: 2
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setScrollFactor(0).setInteractive({ useHandCursor: true });
     container.add(btnTxt);
 
     const hitArea = this.add.rectangle(px, btnY, btnW, btnH, 0x000000, 0.01)
+      .setScrollFactor(0)
       .setInteractive({ useHandCursor: true });
     container.add(hitArea);
+    container.setScrollFactor(0, 0, true);
+
+    let retried = false;
+    let readyForInput = false;
+    const doRetry = () => {
+      if (!readyForInput || retried) return;
+      retried = true;
+      this.showingChoices = false;
+      this.input.keyboard.off('keydown-SPACE', doRetry);
+      this.input.keyboard.off('keydown-ENTER', doRetry);
+      soundManager.playPaperRustle();
+      // Reset all campaign progress to zero and restart GameScene from Chapter 1
+      this.chapterManager.reset();
+      this.cameras.main.fadeOut(400, 0, 0, 0);
+      this.time.delayedCall(420, () => {
+        this.scene.restart();
+      });
+    };
 
     hitArea.on('pointerover', () => {
       drawBtn(true);
@@ -1930,21 +2024,13 @@ export default class GameScene extends Phaser.Scene {
       btnTxt.setColor('#FFE8C0');
     });
 
-    hitArea.on('pointerdown', () => {
-      soundManager.playPaperRustle();
-      container.destroy();
-      this.ambushTriggered = false;
-      this.chapterManager.clearCompanion();
-      if (this.followerCompanion) {
-        this.followerCompanion.destroy();
-        this.followerCompanion = null;
-      }
-      if (this.followerShadow) {
-        this.followerShadow.destroy();
-        this.followerShadow = null;
-      }
-      this.player.setPosition(1530, 560);
-      this.updateAllUI();
+    // Delay input binding so the key/click that closed the last dialogue line cannot auto-dismiss the modal
+    this.time.delayedCall(350, () => {
+      readyForInput = true;
+      hitArea.on('pointerdown', doRetry);
+      btnTxt.on('pointerdown', doRetry);
+      this.input.keyboard.once('keydown-SPACE', doRetry);
+      this.input.keyboard.once('keydown-ENTER', doRetry);
     });
   }
 
@@ -1966,8 +2052,8 @@ export default class GameScene extends Phaser.Scene {
       }
       this.chapterManager.addPoints(10);
       this.showQuestCompleteEffect(
-        'ПОГРАНИЧНЫЙ ПОСТ ПРОЙДЕН!',
-        'Шлагбаум поднят. Перед вами открывается город Семей!\nНаправляйтесь к Штаб-квартире партии «Алаш».',
+        'FRONTIER POST PASSED!',
+        'The barrier is raised. The city of Semey opens before you!\nProceed to the Alash Party Headquarters.',
         '+10 Heritage Points'
       );
       this.updateAllUI();
@@ -1991,7 +2077,7 @@ export default class GameScene extends Phaser.Scene {
         const trustVal = typeof this.chapterManager.getAverageTrust === 'function' ? this.chapterManager.getAverageTrust() : 75;
         const trustLevel = trustVal >= 60 ? 'high' : 'low';
         const epilogueText = (EPILOGUES[choiceObj.id] && EPILOGUES[choiceObj.id][trustLevel]) ||
-          'Рукописи великого Абая и список 12 переписчиков благополучно переданы лидерам партии «Алаш» в городе Семей.';
+          'The manuscripts of the great Abai and the roster of 12 copyists were safely delivered to the Alash leaders in Semey.';
         const points = typeof this.chapterManager.getPoints === 'function' ? this.chapterManager.getPoints() : 100;
         const rank = typeof this.chapterManager.getRank === 'function' ? this.chapterManager.getRank() : 'HERITAGE KEEPER';
 
@@ -2015,7 +2101,7 @@ export default class GameScene extends Phaser.Scene {
     if (!npcKey) return;
     const clues = this.chapterManager.getFoundEvidence();
     if (clues.length === 0) {
-      this.showFloatingNotice('У вас пока нет собранных улик. Осмотрите аул (TAB: Дело).');
+      this.showFloatingNotice('You have no collected evidence yet. Search the village first (TAB: Case File).');
       return;
     }
 
@@ -2025,7 +2111,9 @@ export default class GameScene extends Phaser.Scene {
     const h = this.cameras.main.height;
 
     this.evidenceMenuContainer = this.add.container(0, 0).setDepth(110).setScrollFactor(0);
-    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.65).setInteractive();
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.65)
+      .setScrollFactor(0)
+      .setInteractive();
     this.evidenceMenuContainer.add(overlay);
 
     const panelW = 600, panelH = 340, px = w / 2, py = h / 2;
@@ -2036,12 +2124,12 @@ export default class GameScene extends Phaser.Scene {
     bg.strokeRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
     this.evidenceMenuContainer.add(bg);
 
-    const title = this.add.text(px, py - panelH / 2 + 22, '◆  ПРЕДЪЯВИТЬ УЛИКУ  ◆', {
+    const title = this.add.text(px, py - panelH / 2 + 22, '◆  PRESENT EVIDENCE  ◆', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '15px', color: '#C4A46C', letterSpacing: 2
     }).setOrigin(0.5);
     this.evidenceMenuContainer.add(title);
 
-    const subtitle = this.add.text(px, py - panelH / 2 + 42, `Собеседник: ${this.getNpcDisplayName(npcKey)}`, {
+    const subtitle = this.add.text(px, py - panelH / 2 + 42, `Interlocutor: ${this.getNpcDisplayName(npcKey)}`, {
       fontFamily: 'Lora, Georgia, serif', fontSize: '12px', color: '#D4C5A9', fontStyle: 'italic'
     }).setOrigin(0.5);
     this.evidenceMenuContainer.add(subtitle);
@@ -2060,13 +2148,14 @@ export default class GameScene extends Phaser.Scene {
       this.evidenceMenuContainer.add(cardBg);
 
       const isPresented = this.chapterManager.isCluePresented(npcKey, clue.id);
-      const tag = isPresented ? ' [УЖЕ ПОКАЗАНО]' : '';
+      const tag = isPresented ? ' [SHOWN]' : '';
       const cardTxt = this.add.text(px - cardW / 2 + 16, cy, `[${idx + 1}]  ${clue.name}${tag}`, {
         fontFamily: 'Cinzel, Georgia, serif', fontSize: '12.5px', color: isPresented ? '#A0896C' : '#FFE8C0'
       }).setOrigin(0, 0.5);
       this.evidenceMenuContainer.add(cardTxt);
 
       const hit = this.add.rectangle(px, cy, cardW, cardH, 0x000000, 0.01)
+        .setScrollFactor(0)
         .setInteractive({ useHandCursor: true });
       this.evidenceMenuContainer.add(hit);
 
@@ -2092,10 +2181,11 @@ export default class GameScene extends Phaser.Scene {
       this.evidenceKeyListeners.push({ key: numKey, fn: onSelect });
     });
 
-    const closeBtn = this.add.text(px, py + panelH / 2 - 24, '[ ЗАКРЫТЬ (ESC) ]', {
+    const closeBtn = this.add.text(px, py + panelH / 2 - 24, '[ CLOSE (ESC) ]', {
       fontFamily: 'Cinzel, Georgia, serif', fontSize: '12px', color: '#C4A46C', letterSpacing: 1
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    }).setOrigin(0.5).setScrollFactor(0).setInteractive({ useHandCursor: true });
     this.evidenceMenuContainer.add(closeBtn);
+    this.evidenceMenuContainer.setScrollFactor(0, 0, true);
 
     const onClose = () => this.closeEvidenceMenu();
     closeBtn.on('pointerdown', onClose);
@@ -2118,35 +2208,35 @@ export default class GameScene extends Phaser.Scene {
     this.closeEvidenceMenu();
     soundManager.playPaperRustle();
     const reactions = DIALOGUE.reactions && DIALOGUE.reactions[npcKey];
-    const reactionText = (reactions && reactions[clue.id]) || (reactions && reactions.default) || 'Интересный предмет, но мне нечего о нем сказать.';
+    const reactionText = (reactions && reactions[clue.id]) || (reactions && reactions.default) || 'An interesting item, though I have nothing more to add about it.';
 
     const isNew = this.chapterManager.markCluePresented(npcKey, clue.id);
     if (isNew && reactions && reactions[clue.id]) {
       this.chapterManager.addPoints(5);
       this.chapterManager.adjustTrust(npcKey, 5);
       soundManager.playClueChime();
-      this.showFloatingNotice('+5 Heritage Points (Новая зацепка раскрыта!)');
+      this.showFloatingNotice('+5 Heritage Points (New testimony unlocked!)');
       this.updateAllUI();
     }
 
     this.startDialogueData([
-      { speaker: 'Исследователь', text: `Посмотрите на эту улику: «${clue.name}». Что вы знаете об этом?` },
+      { speaker: 'Investigator', text: `Take a look at this clue: "${clue.name}". What do you know about it?` },
       { speaker: this.getNpcDisplayName(npcKey), text: reactionText }
     ]);
   }
 
   getNpcDisplayName(key) {
     const map = {
-      elder: 'Старейшина аула',
-      teacher: 'Учитель',
-      archivist: 'Архивариус',
-      sadyk: 'Садық (Проводник)',
-      mukhamet: 'Мұхамет (Писарь)',
-      raiymbek: 'Райымбек (Кузнец)',
-      dauletbai: 'Дәулетбай (Купец)',
-      antagonist_road: 'Главарь засады',
-      post_sentry: 'Офицер поста',
-      alash_leader: 'Алихан Бокейханов'
+      elder: 'Village Elder',
+      teacher: 'Teacher',
+      archivist: 'Archivist',
+      sadyk: 'Sadyk (Guide)',
+      mukhamet: 'Mukhamet (Scribe)',
+      raiymbek: 'Raiymbek (Blacksmith)',
+      dauletbai: 'Daulet-bai (Merchant)',
+      antagonist_road: 'Ambush Leader',
+      post_sentry: 'Frontier Officer',
+      alash_leader: 'Alikhan Bokeikhanov'
     };
     return map[key] || key.toUpperCase();
   }

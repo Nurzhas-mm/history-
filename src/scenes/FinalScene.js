@@ -11,15 +11,16 @@ export default class FinalScene extends Phaser.Scene {
     this.finalPoints = (data && data.points) !== undefined ? data.points : 100;
     this.finalRank = (data && data.rank) || 'HERITAGE KEEPER';
     this.finalEnding = (data && data.ending) || {
-      ending: 'ГЕРОИЧЕСКИЙ ПУТЬ',
-      endingText: 'Мужество и верность спасли духовное сокровище нации.'
+      ending: 'HEROIC PATH',
+      endingText: 'Courage and loyalty preserved the spiritual treasure of the nation.'
     };
     this.epilogueText = (data && data.epilogueText) ||
-      'Рукописи великого Абая и список двенадцати переписчиков благополучно переданы лидерам партии «Алаш» в городе Семей.';
+      'The manuscripts of the great Abai and the roster of the twelve copyists were safely delivered to the leaders of the Alash movement in Semey.';
     this.trust = (data && data.trust) !== undefined ? data.trust : 75;
   }
 
   create() {
+    soundManager.stopWindAmbient();
     try {
       localStorage.removeItem('archives_of_alash_save');
     } catch (e) {}
@@ -36,24 +37,24 @@ export default class FinalScene extends Phaser.Scene {
     let delay = 250;
 
     // Top ornamental badge
-    const topBadge = this.add.text(w / 2, 30, '❖  ҰЛЫ ЖЕҢІС  •  ВЕЛИКАЯ ПОБЕДА  ❖', {
+    const topBadge = this.add.text(w / 2, 30, '❖  GREAT VICTORY  •  TRIUMPH OF HERITAGE  ❖', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '12px',
       color: '#C4A46C',
       letterSpacing: 4,
     }).setOrigin(0.5).setAlpha(0);
 
-    // Main Glorious Celebration Header: ПОЗДРАВЛЯЕМ! СЛАВА ХРАНИТЕЛЮ НАСЛЕДИЯ!
-    const titleText = this.add.text(w / 2, 60, '◆ ПОЗДРАВЛЯЕМ! СЛАВА ХРАНИТЕЛЮ НАСЛЕДИЯ! ◆', {
+    // Main Glorious Celebration Header
+    const titleText = this.add.text(w / 2, 60, '◆ CONGRATULATIONS! GLORY TO THE GUARDIAN OF HERITAGE! ◆', {
       fontFamily: 'Cinzel, Georgia, serif',
-      fontSize: '23px',
+      fontSize: '21px',
       color: '#FFD700',
       stroke: '#2A1506',
       strokeThickness: 4,
       letterSpacing: 2,
     }).setOrigin(0.5).setAlpha(0);
 
-    const subText = this.add.text(w / 2, 88, 'РУКОПИСИ ВЕЛИКОГО АБАЯ И СПИСОК 12 ПЕРЕПИСЧИКОВ СПАСЕНЫ!', {
+    const subText = this.add.text(w / 2, 88, 'ABAI’S MANUSCRIPTS AND THE ROSTER OF 12 COPYISTS HAVE BEEN SAVED!', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '11px',
       color: '#FFE8C0',
@@ -79,7 +80,7 @@ export default class FinalScene extends Phaser.Scene {
     praiseBox.lineStyle(1.5, 0xD4AF37, 0.75);
     praiseBox.strokeRoundedRect(w / 2 - praiseCardW / 2, praiseCardY - praiseCardH / 2, praiseCardW, praiseCardH, 10);
 
-    const praiseBadge = this.add.text(w / 2, praiseCardY - praiseCardH / 2 + 16, '★  ЧЕСТЬ И СЛАВА ДОБЛЕСТНОМУ ИССЛЕДОВАТЕЛЮ!  ★', {
+    const praiseBadge = this.add.text(w / 2, praiseCardY - praiseCardH / 2 + 16, '★  HONOR AND GLORY TO THE VALIANT INVESTIGATOR!  ★', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '13px',
       color: '#FFD700',
@@ -87,10 +88,10 @@ export default class FinalScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0);
 
     const praiseText = this.add.text(w / 2, praiseCardY + 12,
-      '«Слава тебе, верный хранитель степного слова! Ты преодолел опасности Степной дороги,\n' +
-      'разоблачил коварство разбойников и царские заставы, доставив бесценные рукописи Абая\n' +
-      'лидерам движения «Алаш» (Әлихан Бөкейханов, Ахмет Байтұрсынұлы) в город Семей.\n' +
-      'Имена 12 переписчиков защищены, а духовный факел нации сохранен для потомков!»', {
+      '"Glory to you, faithful keeper of the steppe word! You overcame the perils of the Steppe Road,\n' +
+      'foiled the treachery of ambushers and imperial outposts, and delivered Abai’s priceless manuscripts\n' +
+      'to the leaders of the Alash movement (Alikhan Bokeikhanov and Akhmet Baitursynuly) in Semey.\n' +
+      'The names of the 12 copyists are protected, and the spiritual torch of the nation lives on!"', {
       fontFamily: 'Lora, Georgia, serif',
       fontSize: '12px',
       color: '#F4E4C8',
@@ -113,7 +114,7 @@ export default class FinalScene extends Phaser.Scene {
     epiBox.lineStyle(1, 0x8B7355, 0.65);
     epiBox.strokeRoundedRect(w / 2 - epiW / 2, epiY - epiH / 2, epiW, epiH, 8);
 
-    const endingTitleStr = this.finalEnding && this.finalEnding.ending ? `ИТОГ ПОХОДА: ${this.finalEnding.ending}` : 'ИТОГ ПОХОДА: ВЕЛИКИЙ ТРИУМФ В СЕМЕЕ';
+    const endingTitleStr = this.finalEnding && this.finalEnding.ending ? `JOURNEY OUTCOME: ${this.finalEnding.ending}` : 'JOURNEY OUTCOME: TRIUMPH IN SEMEY';
     const endingTitle = this.add.text(w / 2, epiY - epiH / 2 + 16, endingTitleStr, {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '13px',
@@ -141,7 +142,7 @@ export default class FinalScene extends Phaser.Scene {
     delay += 250;
 
     // Heritage points display & Rank Badge
-    const pointsLabel = this.add.text(w / 2, 388, 'НАБРАННЫЕ ОЧКИ НАСЛЕДИЯ  •  HERITAGE POINTS', {
+    const pointsLabel = this.add.text(w / 2, 388, 'TOTAL HERITAGE POINTS EARNED', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '11px',
       color: '#A0896C',
@@ -167,14 +168,14 @@ export default class FinalScene extends Phaser.Scene {
     rankBadge.lineStyle(1.5, rankColor, 0.85);
     rankBadge.strokeRoundedRect(w / 2 - badgeW / 2, badgeY - badgeH / 2, badgeW, badgeH, 17);
 
-    const rankText = this.add.text(w / 2, badgeY, `✦  РАНГ: ${this.finalRank}  ✦`, {
+    const rankText = this.add.text(w / 2, badgeY, `✦  RANK: ${this.finalRank}  ✦`, {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '14px',
       color: rankColor,
       letterSpacing: 2,
     }).setOrigin(0.5).setAlpha(0);
 
-    const trustText = this.add.text(w / 2, 502, `УРОВЕНЬ ДОВЕРИЯ ЖИТЕЛЕЙ: ${this.trust}%  •  ВСЕ ГЛАВЫ ЗАВЕРШЕНЫ`, {
+    const trustText = this.add.text(w / 2, 502, `VILLAGE TRUST LEVEL: ${this.trust}%  •  ALL CHAPTERS COMPLETED`, {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '10.5px',
       color: '#C4A46C',
@@ -190,14 +191,14 @@ export default class FinalScene extends Phaser.Scene {
     this.createButtons(w, h, delay);
 
     // Immortal quote from Abai
-    const quoteTxt = this.add.text(w / 2, 692, '«Өлді деуге бола ма, ойлаңдаршы, Өлмейтұғын артына сөз қалдырған...»', {
+    const quoteTxt = this.add.text(w / 2, 692, '"Can one truly be called dead, if they leave behind immortal words?.."', {
       fontFamily: 'Lora, Georgia, serif',
       fontSize: '12.5px',
       color: '#C4A46C',
       fontStyle: 'italic',
     }).setOrigin(0.5).setAlpha(0);
 
-    const authorTxt = this.add.text(w / 2, 714, '— Хәкім Абай Құнанбайұлы (1845–1904)', {
+    const authorTxt = this.add.text(w / 2, 714, '— Abai Kunanbaiuly (1845–1904)', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '11px',
       color: '#8B7355',
@@ -214,12 +215,12 @@ export default class FinalScene extends Phaser.Scene {
     const btnY2 = 614;
 
     // Button 1: Historical Context
-    this.createCustomButton(w / 2, btnY1, btnW, btnH, '📜  ИСТОРИЧЕСКИЕ ХРОНИКИ', delay, () => {
+    this.createCustomButton(w / 2, btnY1, btnW, btnH, '📜  HISTORICAL CHRONICLES', delay, () => {
       this.showHistoryModal(w, h);
     });
 
     // Button 2: Play Again
-    this.createCustomButton(w / 2, btnY2, btnW, btnH, '↺  ИГРАТЬ СНОВА (PLAY AGAIN)', delay + 180, () => {
+    this.createCustomButton(w / 2, btnY2, btnW, btnH, '↺  PLAY AGAIN', delay + 180, () => {
       try {
         localStorage.removeItem('archives_of_alash_save');
       } catch (e) {}
@@ -287,7 +288,7 @@ export default class FinalScene extends Phaser.Scene {
     panel.strokeRoundedRect(px - panelW / 2, py - panelH / 2, panelW, panelH, 14);
     modalContainer.add(panel);
 
-    const title = this.add.text(px, py - panelH / 2 + 35, '◆  ИСТОРИЧЕСКИЕ ХРОНИКИ (1904–1937)  ◆', {
+    const title = this.add.text(px, py - panelH / 2 + 35, '◆  HISTORICAL CHRONICLES (1904–1937)  ◆', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '17px',
       color: '#FFD700',
@@ -317,7 +318,7 @@ export default class FinalScene extends Phaser.Scene {
       cy += 95;
     });
 
-    const closeBtn = this.add.text(px, py + panelH / 2 - 30, '[ ЗАКРЫТЬ АРХИВ / CLOSE ]', {
+    const closeBtn = this.add.text(px, py + panelH / 2 - 30, '[ CLOSE ARCHIVE ]', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '14px',
       color: '#C4A46C',

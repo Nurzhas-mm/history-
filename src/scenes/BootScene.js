@@ -11,14 +11,14 @@ export default class BootScene extends Phaser.Scene {
 
     this.add.rectangle(w / 2, h / 2, w, h, 0x1a0a00);
 
-    const title = this.add.text(w / 2, h / 2 - 60, 'ARCHIVES OF ALASH', {
+    const title = this.add.text(w / 2, h / 2 - 60, 'HISTORY OF KAZAKHSTAN', {
       fontFamily: 'Cinzel, Georgia, serif',
       fontSize: '26px',
       color: '#C4A46C',
       letterSpacing: 6,
     }).setOrigin(0.5);
 
-    const subtitle = this.add.text(w / 2, h / 2 - 10, 'Loading the archive...', {
+    const subtitle = this.add.text(w / 2, h / 2 - 10, 'Loading historical chronicles...', {
       fontFamily: 'Lora, Georgia, serif',
       fontSize: '14px',
       color: '#A0896C',

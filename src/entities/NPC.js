@@ -77,6 +77,22 @@ export default class NPC extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  setNpcVisible(visible) {
+    this.setVisible(visible);
+    if (this.body) {
+      this.body.enable = visible;
+    }
+    if (this.shadow) {
+      this.shadow.setVisible(visible);
+    }
+    if (this.nameLabel) {
+      this.nameLabel.setVisible(visible);
+    }
+    if (this.indicatorSprite) {
+      this.indicatorSprite.setVisible(visible);
+    }
+  }
+
   getName() {
     return this.npcName;
   }

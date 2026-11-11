@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import soundManager from '../systems/SoundManager.js';
 
 export default class IntroScene extends Phaser.Scene {
   constructor() {
@@ -6,6 +7,7 @@ export default class IntroScene extends Phaser.Scene {
   }
 
   create() {
+    soundManager.stopWindAmbient();
     this.cameras.main.fadeIn(600, 0, 0, 0);
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;

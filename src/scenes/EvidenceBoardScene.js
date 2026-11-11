@@ -229,43 +229,43 @@ export default class EvidenceBoardScene extends Phaser.Scene {
     const startY = 105;
     const witnesses = [
       {
-        name: 'Village Elder (Ақсақал)',
+        name: 'Village Elder (Aksakal)',
         role: 'Keeper of the Youth Pact',
         trust: this.cm.getTrust('elder'),
         testimony: 'Entrusted by Sabit with the secret roster of 12 copyists. Hid it in an oiled packet under the well foundation stone to shield them from imperial arrest.'
       },
       {
-        name: 'Teacher (Мұғалім)',
+        name: 'Teacher (Mugalim)',
         role: 'Village Schoolmaster',
         trust: this.cm.getTrust('teacher'),
         testimony: 'Identified rare violet scribe ink made by Murseyit. Recalled an elder holding a package near the well at dawn. Knowledge and verse are our weapons.'
       },
       {
-        name: 'Archivist (Мұрағатшы)',
+        name: 'Archivist (Muragatshy)',
         role: 'Keeper of Books & Lineages',
         trust: this.cm.getTrust('archivist'),
         testimony: 'Terrified of police confiscations. Moved the page from the well into his travel chest to flee to Semey and deliver it directly to the Alash committee.'
       },
       {
-        name: 'Raiymbek (Райымбек)',
+        name: 'Raiymbek (Blacksmith)',
         role: 'Blacksmith & Batyr’s Descendant',
         trust: 85,
         testimony: 'A fierce blacksmith proud of his ancestors. Vows that his forged battle-saber will defend the Master’s words against any road ambush.'
       },
       {
-        name: 'Daulet-bai (Дәулетбай)',
+        name: 'Daulet-bai (Merchant)',
         role: 'First-Guild Trade Merchant',
         trust: 80,
         testimony: 'Influential merchant with trade carriages and governor permits. Believes gold and connections can bypass any imperial checkpoint without violence.'
       },
       {
-        name: 'Sadyk (Садық)',
+        name: 'Sadyk (Guide)',
         role: 'Steppe Herdsman',
         trust: 30,
         testimony: 'Claims to know secret steppe passes, but eyes valuables hungrily. Beware of false guides in the hills.'
       },
       {
-        name: 'Mukhamet (Мұхамет)',
+        name: 'Mukhamet (Scribe)',
         role: 'Village Scribe & Clerk',
         trust: 35,
         testimony: 'Speaks official Russian and praises decrees. Highly interested in the imperial bounty for unregistered texts.'

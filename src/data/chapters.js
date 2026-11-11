@@ -65,7 +65,7 @@ export const COMPANIONS = [
   {
     id: 'sadyk',
     name: 'Sadyk the Steppe Guide',
-    title: 'Садық (Степной проводник)',
+    title: 'Sadyk (Steppe Guide)',
     desc: 'Boasts he knows secret steppe ravines to bypass any imperial patrol.',
     outcome: 'betrayal',
     flaw: 'Secretly conspired with the steppe ambushers to claim the imperial bounty.',
@@ -73,7 +73,7 @@ export const COMPANIONS = [
   {
     id: 'mukhamet',
     name: 'Mukhamet the Scribe',
-    title: 'Мұхамет (Писарь)',
+    title: 'Mukhamet (District Scribe)',
     desc: 'Eloquent, educated clerk who claims devotion to enlightenment.',
     outcome: 'theft',
     flaw: 'Covets an imperial government rank and silver reward for turning in the copyists.',
@@ -81,7 +81,7 @@ export const COMPANIONS = [
   {
     id: 'raiymbek',
     name: 'Raiymbek the Blacksmith',
-    title: 'Райымбек (Кузнец, потомок батыров)',
+    title: 'Raiymbek (Blacksmith, Descendant of Batyrs)',
     desc: 'Muscular craftsman who carries the battle spirit of Kazakh batyrs.',
     outcome: 'heroic',
     virtue: 'Fiercely loyal. Shatters the ambushers in combat and opens the frontier post.',
@@ -89,7 +89,7 @@ export const COMPANIONS = [
   {
     id: 'dauletbai',
     name: 'Daulet-bai the Merchant',
-    title: 'Дәулетбай (Богатый купец)',
+    title: 'Daulet-bai (Wealthy Merchant)',
     desc: 'Influential trade merchant with bags of gold rubles and governor permits.',
     outcome: 'diplomatic',
     virtue: 'Bribes the road ambushers and the checkpoint sentries without shedding blood.',
